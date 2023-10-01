@@ -16,16 +16,19 @@ add_executable(${PROJECT_NAME}
     ./src/logger.cpp
     ./src/files.cpp
     ./src/mathematics.cpp
-    ./src/stb_image.cpp
 
     ./src/input.cpp
     ./src/window.cpp
     ./src/render.cpp
+    ./src/profiler.cpp
 
+    ./src/stb_image.cpp
     ./src/transform.cpp
     ./src/blocks.cpp
     ./src/world.cpp
     ./src/player.cpp
+
+    ./src/application.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC

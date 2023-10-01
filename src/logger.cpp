@@ -3,32 +3,37 @@
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
 
-DEFINE_LOG_CATEGORY(LogTemp, spdlog::level::trace);
+DEFINE_LOG_CATEGORY(LogTemp, CONSOLE_LOGGER(trace));
 
 namespace Logger
 {
-    std::shared_ptr<spdlog::logger> CreateLogger(const std::string& name)
+    static std::shared_ptr<spdlog::logger> CreateConsoleLogger(const char* name, const ConsoleLoggerDesc& desc);
+    static std::shared_ptr<spdlog::logger> CreateFileLogger(const char* name, const FileLoggerDesc& desc);
+
+    std::shared_ptr<spdlog::logger> CreateLogger(const char* name, const LoggerDesc& desc)
     {
-        auto logger = spdlog::stdout_color_mt(name);
-        logger->set_level(spdlog::level::trace);
+        std::shared_ptr<spdlog::logger> logger;
+
+        switch(desc.type)
+        {
+        case LoggerDesc::CONSOLE: logger = CreateConsoleLogger(name, desc.console_logger); break;
+        case LoggerDesc::FILE: logger = CreateFileLogger(name, desc.file_logger); break;
+        }
+
+        logger->set_level(desc.level);
+        
         return logger;
     }
 
-    std::shared_ptr<spdlog::logger> CreateLogger(const std::string& name, const spdlog::level::level_enum& level)
+    static std::shared_ptr<spdlog::logger> CreateConsoleLogger(const char* name, const ConsoleLoggerDesc& desc)
     {
-        auto logger = spdlog::stdout_color_mt(name);
-        logger->set_level(level);
+        std::shared_ptr<spdlog::logger> logger = spdlog::stdout_color_mt(name);
         return logger;
     }
 
-    std::shared_ptr<spdlog::logger> CreateLogger(const std::string& name, const spdlog::level::level_enum& level, const std::string& file)
+    static std::shared_ptr<spdlog::logger> CreateFileLogger(const char* name, const FileLoggerDesc& desc)
     {
-#ifdef NDEBUG
-        auto logger = spdlog::stdout_color_mt(name);
-#else
-        auto logger = spdlog::basic_logger_mt(name, file);
-#endif
-        logger->set_level(level);
+        std::shared_ptr<spdlog::logger> logger = spdlog::basic_logger_mt(name, desc.file_path);
         return logger;
     }
 };

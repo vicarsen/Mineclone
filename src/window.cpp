@@ -2,87 +2,55 @@
 
 #include "files.h"
 
-DEFINE_LOG_CATEGORY(GLFWInternal, spdlog::level::trace, LOGFILE("Window/GLFWInternal.txt"));
-DEFINE_LOG_CATEGORY(Window, spdlog::level::trace, LOGFILE("Window/Window.txt"));
+DEFINE_LOG_CATEGORY(GLFWInternal, FILE_LOGGER(trace, LOGFILE("Window/GLFWInternal.txt")));
+DEFINE_LOG_CATEGORY(Window, FILE_LOGGER(trace, LOGFILE("Window/Window.txt")));
 
 namespace Window
 {
-    static int g_width, g_height;
-    static std::string g_title;
-    static GLFWwindow* g_window;
-
     static void GLFWErrorCallback(int error, const char* description)
     {
         ERROR(GLFWInternal, "(error:{}) {}", error, description);
     }
 
-    void Init(unsigned int width, unsigned int height, const std::string& title)
+    Window::Window(unsigned int _width, unsigned int _height, const char* _title) :
+        width(_width), height(_height), title(_title)
     {
-        TRACE(Window, "[Init] (#width:{}) (#height:{}) (#title:{})", width, height, title);
-        g_width = width; g_height = height; g_title = title;
-
         glfwSetErrorCallback(GLFWErrorCallback);
-    
+
         if(!glfwInit())
         {
-            CRITICAL(Window, "[Init] GLFW init failure");
+            CRITICAL(Window, "Failed to initialize GLFW!");
             return;
         }
 
-        g_window = glfwCreateWindow(g_width, g_height, g_title.c_str(), NULL, NULL);
-        if(g_window == nullptr)
+        window = glfwCreateWindow(width, height, title.c_str(), NULL, NULL);
+        if(window == nullptr)
         {
-            CRITICAL(Window, "[Init] window creation failure");
+            CRITICAL(Window, "Failed to create window!");
             return;
         }
     }
 
-    void Destroy()
+    Window::~Window()
     {
-        TRACE(Window, "[Destroy] <>");
-
-        if(g_window != nullptr) glfwDestroyWindow(g_window);
+        if(window != nullptr)
+            glfwDestroyWindow(window);
         glfwTerminate();
     }
 
-    void Present()
+    void Window::Present()
     {
-        glfwSwapBuffers(g_window);
+        glfwSwapBuffers(window);
     }
 
-    void Update()
+    void Window::Update()
     {
         glfwPollEvents();
     }
 
-    bool ShouldClose()
+    bool Window::ShouldClose()
     {
-        return glfwWindowShouldClose(g_window);
-    }
-
-    GLFWwindow* GetInternalWindow()
-    {
-        return g_window;
-    }
-
-    unsigned int GetWidth()
-    {
-        return g_width;
-    }
-
-    unsigned int GetHeight()
-    {
-        return g_height;
-    }
-
-    float GetAspectRatio()
-    {
-        return g_width * 1.0f / g_height;
-    }
-
-    const std::string& GetTitle()
-    {
-        return g_title;
+        return glfwWindowShouldClose(window);
     }
 };
 

@@ -1,9 +1,7 @@
 #pragma once
 
 #include <vector>
-#include <unordered_set>
 #include <unordered_map>
-#include <queue>
 #include <mutex>
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -23,15 +21,12 @@ namespace Game
     public:
         Chunk();
         Chunk(Chunk&& other);
+        Chunk(const Chunk& other) = delete;
+
         ~Chunk();
 
         Chunk& operator=(Chunk&& other);
-
-        void __Deprecated_PlaceBlock(const glm::ivec3& position, BlockID block);
-        void __Deprecated_RemoveBlock(const glm::ivec3& position);
-
-        inline void __Deprecated_SetGeometryBuilt(bool geometry) noexcept { geometry_built = geometry; }
-        inline void __Deprecated_SetLazy(bool lazy) noexcept { lazy_build = lazy; }
+        Chunk& operator=(const Chunk& other) = delete;
 
         void PlaceBlock(const glm::ivec3& position, BlockID block);
         void RemoveBlock(const glm::ivec3& position);
@@ -39,108 +34,114 @@ namespace Game
         void BuildGeometry();
 
         inline bool IsGeometryBuilt() const noexcept { return geometry_built; }
-
-        inline Render::ChunkMesh& GetMesh() noexcept { return mesh; }
-        inline const Render::ChunkMesh& GetMesh() const noexcept { return mesh; }
+        inline void SetGeometryBuilt(bool built) noexcept { geometry_built = built; }
 
         inline Transform& GetTransform() noexcept { return transform; }
         inline const Transform& GetTransform() const noexcept { return transform; }
 
-        inline void SetCoordinates(const glm::ivec3& _coords) noexcept { coords = _coords; }
+        inline void SetCoordinates(const glm::ivec3& coords) noexcept { this->coords = coords; }
         inline const glm::ivec3& GetCoordinates() const noexcept { return coords; }
 
     private:
-        typedef char BlockFlag;
-
-        static inline const BlockFlag BLOCKFLAG_REPLACED = (1 << 0);
-
-        inline BlockFlag IsBlockNotReplaced(const glm::ivec3& position) const { return (flags[position.x][position.y][position.z] & BLOCKFLAG_REPLACED) == 0; }
-        
-        BlockID GetFaceBlock(const glm::ivec3& position, const glm::ivec3& next);
+        void LazyMesh(int layer, const Game::Face slice[CHUNK_SIZE][CHUNK_SIZE], Render::FaceOrientation orientation, std::vector<Render::FaceMesh>& out);
+        Render::FaceMesh GenerateLongFace(int layer, const Game::Face& face, Render::FaceOrientation orientation, int x1, int y1, int x2, int y2);
 
     private:
-        Render::ChunkMesh mesh;
         BlockID blocks[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE];
-        BlockFlag flags[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE];
+
         Game::Transform transform;
         glm::ivec3 coords;
 
-        std::queue<glm::ivec3> places;
+        Render::RenderThread::ChunkMeshHandle mesh_handle;
         
-        std::vector<glm::ivec3> faceRemove[3];
-        std::vector<glm::ivec3> facePlace[3];
-        std::vector<Face> faceToPlace[3];
-
         bool geometry_built = false;
-        bool lazy_build = false;
-    };
-
-    class World
-    {
-    public:
-        World();
-        World(World&& other);
-        ~World();
-
-        World& operator=(World&& other);
-
-        void __Deprecated_PlaceBlock(const glm::ivec3& position, BlockID block);
-        void __Deprecated_RemoveBlock(const glm::ivec3& position);
-
-        void PlaceBlock(const glm::ivec3& position, BlockID block);
-        void RemoveBlock(const glm::ivec3& position);
-
-        Chunk& LoadChunk(const glm::ivec3& chunkCoords);
-        void LoadChunk(const glm::ivec3& chunkCoords, Chunk&& chunk);
-        void UnloadChunk(const glm::ivec3& chunkCoords);
-
-        Chunk& GetChunk(const glm::ivec3& chunkCoords);
-        const Chunk& GetChunk(const glm::ivec3& chunkCoords) const;
-
-        inline std::vector<Chunk>& GetChunks() noexcept { return chunks; }
-        inline const std::vector<Chunk>& GetChunks() const noexcept { return chunks; }
-
-        inline bool IsChunkLoaded(const glm::ivec3& coordinates) const noexcept { return chunkPositions.find(coordinates) != chunkPositions.end(); }
-
-        inline void lock() { chunksMutex.lock(); }
-        inline bool try_lock() { return chunksMutex.try_lock(); }
-        inline void unlock() { chunksMutex.unlock(); }
-
-        static glm::ivec3 GetChunkCoordinates(const glm::ivec3& coordinates) noexcept;
-
-    private:
-        std::mutex chunksMutex;
-        std::vector<Chunk> chunks;
-        std::unordered_map<glm::ivec3, unsigned int> chunkPositions;
     };
 
     class ChunkGenerator
     {
     public:
-        virtual void GenerateChunk(Game::Chunk& chunk, const glm::ivec3& coords) = 0;
+        virtual void GenerateChunk(Game::Chunk& chunk, const glm::ivec3& chunk_coordinates) = 0;
     };
 
     class SuperflatChunkGenerator : public ChunkGenerator
     {
     public:
-        virtual void GenerateChunk(Game::Chunk& chunk, const glm::ivec3& coords) override;
+         virtual void GenerateChunk(Game::Chunk& chunk, const glm::ivec3& chunk_coordinates) override;
     };
 
-    class WorldLoader
+    class World
     {
     public:
-        WorldLoader(const std::shared_ptr<World>& world, std::unique_ptr<ChunkGenerator>& generator);
-        ~WorldLoader();
+        World(std::unique_ptr<ChunkGenerator>& chunk_generator);
+        World(World&& other);
+        World(const World& other) = delete;
+        ~World();
 
-        bool LoadChunks(const glm::ivec3& center, unsigned int radius);
+        World& operator=(World&& other);
+        World& operator=(const World& other) = delete;
+
+        void PlaceBlock(const glm::ivec3& position, BlockID block);
+        void RemoveBlock(const glm::ivec3& position);
+
+        Chunk& LoadChunk(const glm::ivec3& chunk_coordinates);
+        void UnloadChunk(const glm::ivec3& chunk_coordinates);
+
+        Chunk& GetChunk(const glm::ivec3& chunk_coordinates);
+        const Chunk& GetChunk(const glm::ivec3& chunk_coordinates) const;
+
+        inline std::vector<Chunk>& GetChunks() noexcept { return chunks; }
+        inline const std::vector<Chunk>& GetChunks() const noexcept { return chunks; }
+
+        inline ChunkGenerator* GetChunkGenerator() { return chunk_generator.get(); }
+
+        inline bool IsChunkLoaded(const glm::ivec3& coordinates) const noexcept { return chunk_index.find(coordinates) != chunk_index.end(); }
+
+        inline std::mutex& GetMutex() const noexcept { return mutex; }
+
+        static glm::ivec3 GlobalCoordinatesToChunkCoordinates(const glm::ivec3& coordinates) noexcept;
+        static glm::ivec3 GlobalCoordinatesToLocalCoordinates(const glm::ivec3& coordinates) noexcept;
 
     private:
-        std::weak_ptr<World> world;
-        std::unique_ptr<ChunkGenerator> generator;
-        glm::ivec3 previous;
+        mutable std::mutex mutex;
 
-        std::unordered_set<glm::ivec3> on_border;
-        std::vector<glm::ivec3> border;
+        std::vector<Chunk> chunks;
+        std::unordered_map<glm::ivec3, unsigned int> chunk_index;
+
+        std::unique_ptr<ChunkGenerator> chunk_generator;
+    };
+
+    class WorldLoadThread
+    {
+    public:
+        WorldLoadThread();
+        ~WorldLoadThread();
+
+        void AddPlayer(const std::shared_ptr<Player>& player);
+        void RemovePlayer(const std::shared_ptr<Player>& player);
+
+        void SetWorld(const std::shared_ptr<World>& world);
+
+    private:
+        struct LoadTarget
+        {
+            glm::ivec3 center;
+            float radius;
+        };
+
+    private:
+        void Run();
+
+        void FindChunksInSphere(const glm::ivec3& center, float radius, std::unordered_set<glm::ivec3>& out);
+
+    private:
+        std::thread thread;
+        std::atomic<bool> exit;
+
+        std::shared_ptr<World> world;
+        mutable std::mutex world_mutex;
+
+        std::vector<std::shared_ptr<Player>> players;
+        mutable std::mutex players_mutex;
     };
 };
 

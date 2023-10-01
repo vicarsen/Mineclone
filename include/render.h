@@ -1,25 +1,34 @@
 #pragma once
 
-#include <string>
 #include <memory>
+#include <thread>
+#include <queue>
+#include <vector>
+#include <unordered_set>
 
 #include <glm/glm.hpp>
 
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+
 #include "config.h"
 #include "logger.h"
-#include "blocks.h"
-#include "player.h"
+#include "events.h"
 
 DECLARE_LOG_CATEGORY(OpenGLInternal);
 DECLARE_LOG_CATEGORY(Shaders);
-DECLARE_LOG_CATEGORY(DynamicFaceBuffer);
+DECLARE_LOG_CATEGORY(FaceBuffer);
 DECLARE_LOG_CATEGORY(ChunkMesh);
 DECLARE_LOG_CATEGORY(Renderer);
 DECLARE_LOG_CATEGORY(ChunkRenderer);
 
 namespace Game
 {
+    class Chunk;
     class World;
+    class Player;
+    class Face;
+    class Transform;
 };
 
 namespace Render
@@ -36,41 +45,26 @@ namespace Render
 
     enum class FaceOrientation { XOY, YOZ, ZOX };
     
-    class DynamicFaceBuffer
+    class FaceBuffer
     {
     public:
-        inline static const unsigned int STEP = 32 * 32;
-        inline static const unsigned int HALF_STEP = STEP / 2;
+        FaceBuffer();
+        FaceBuffer(FaceBuffer&& other);
+        FaceBuffer(const FaceBuffer& other);
+        ~FaceBuffer();
 
-        DynamicFaceBuffer(unsigned int _reserved = STEP);
-        DynamicFaceBuffer(DynamicFaceBuffer&& other);
-        DynamicFaceBuffer(const DynamicFaceBuffer& other);
-        ~DynamicFaceBuffer();
+        FaceBuffer& operator=(FaceBuffer&& other);
+        FaceBuffer& operator=(const FaceBuffer& other);
 
-        DynamicFaceBuffer& operator=(DynamicFaceBuffer&& other);
-        DynamicFaceBuffer& operator=(const DynamicFaceBuffer& other);
-
-        void Insert(unsigned int faceID, const FaceMesh& face);
-        void Remove(unsigned int faceID);
-
-        void InsertMany(unsigned int count, const unsigned int* faceIDs, const FaceMesh* faces);
-        void RemoveMany(unsigned int count, const unsigned int* faceIDs);
-
-        void Clear();
-
-        inline bool Has(unsigned int faceID) const { return sparse[faceID] != 0xffff; }
+        void SetData(unsigned int count, const FaceMesh* meshes);
 
         void Bind() const;
 
         inline unsigned int Size() const noexcept { return size; }
 
     private:
-        void ValidateAndReallocate(unsigned int additional = 1);
-
-    private:
-        unsigned int reserved, size;
+        unsigned int size;
         unsigned int vao, buffer;
-        unsigned short sparse[(CHUNK_SIZE + 1) * (CHUNK_SIZE + 1) * (CHUNK_SIZE + 1)];
     };
 
     class ChunkMesh
@@ -78,42 +72,47 @@ namespace Render
     public:
         ChunkMesh();
         ChunkMesh(ChunkMesh&& other);
+        ChunkMesh(const ChunkMesh& other);
+
         ~ChunkMesh();
 
         ChunkMesh& operator=(ChunkMesh&& other);
+        ChunkMesh& operator=(const ChunkMesh& other);
 
-        void PlaceFace(const glm::ivec3& position, FaceOrientation orientation, Game::Face face);
-        void RemoveFace(const glm::ivec3& position, FaceOrientation orientation);
-
-        void PlaceManyFaces(unsigned int count, const glm::ivec3* positions, FaceOrientation orientation, const Game::Face* faces);
-        void PlaceManyFaces(unsigned int count, const glm::ivec3* positions, FaceOrientation orientation, Game::Face face);
-        void RemoveManyFaces(unsigned int count, const glm::ivec3* positions, FaceOrientation orientation);
-
-        void ClearFaces(FaceOrientation orientation);
-
-        bool HasFace(FaceOrientation orientation, const glm::ivec3& position);
+        void SetFaces(unsigned int count, const FaceMesh* meshes, FaceOrientation orientation);
 
         void Bind(unsigned int buffer) const;
 
         inline unsigned int Size() const noexcept { return 3; }
-        inline unsigned int Size(unsigned int i) const noexcept { return buffers[i].Size(); }
+        inline unsigned int BufferSize(unsigned int i) const noexcept { return buffers[i].Size(); }
+
+        inline void SetModelMatrix(const glm::mat4& model_matrix) noexcept { this->model_matrix = model_matrix; }
+        inline const glm::mat4& GetModelMatrix() const noexcept { return model_matrix; }
+
+        inline void SetHandle(int handle) noexcept { this->handle = handle; }
+        inline int GetHandle() const noexcept { return handle; }
 
     private:
-        DynamicFaceBuffer buffers[3];
+        FaceBuffer buffers[3];
+        glm::mat4 model_matrix;
+        int handle;
     };
 
     class VFShader
     {
     public:
-        VFShader() = default;
-        ~VFShader() = default;
+        VFShader(const char* vertex_src, const char* fragment_src);
+        VFShader(VFShader&& other);
+        VFShader(const VFShader& other) = delete;
 
-        void Init(const std::string& vertexSrc, const std::string& fragmentSrc);
-        void Destroy();
+        ~VFShader();
+
+        VFShader& operator=(VFShader&& other);
+        VFShader& operator=(const VFShader& other) = delete;
 
         void Bind() const;
 
-        int GetUniformLocation(const std::string& name);
+        int GetUniformLocation(const char* name);
 
     private:
         unsigned int program;
@@ -124,17 +123,22 @@ namespace Render
     class Texture2D
     {
     public:
-        Texture2D() = default;
-        ~Texture2D() = default;
+        Texture2D(unsigned int levels, unsigned int channels, unsigned int width, unsigned int height);
+        Texture2D(Texture2D&& other);
+        Texture2D(const Texture2D& other) = delete;
 
-        void Init(unsigned int levels, unsigned int channels, unsigned int width, unsigned int height);
-        void Destroy();
+        ~Texture2D();
+
+        Texture2D& operator=(Texture2D&& other);
+        Texture2D& operator=(const Texture2D& other) = delete;
 
         void SetStyle(TextureStyle style);
 
         void SetData(const unsigned char* data, unsigned int level, unsigned int channels);
         void SetData(const unsigned char* data, unsigned int level, unsigned int channels, unsigned int x, unsigned int y, unsigned int width, unsigned int height);
-        void CopyData(const Texture2D& other, unsigned int srcLevel, unsigned int srcX, unsigned int srcY, unsigned int dstLevel, unsigned int dstX, unsigned int dstY, unsigned int width, unsigned int height);
+        
+        void CopyData(const Texture2D& other, unsigned int src_level, unsigned int src_x, unsigned int src_y, unsigned int dst_level, unsigned int dst_x, unsigned int dst_y, unsigned int width, unsigned int height);
+
         void GenerateMipmaps();
 
         void Bind(unsigned int slot) const;
@@ -157,60 +161,57 @@ namespace Render
         static inline const unsigned int STEP = 16;
         static inline const unsigned int HALF_STEP = 8;
 
-        TextureAtlas() = default;
-        ~TextureAtlas() = default;
+        TextureAtlas();
+        TextureAtlas(TextureAtlas&& other);
+        TextureAtlas(const TextureAtlas& other) = delete;
+        
+        ~TextureAtlas();
 
-        void Init(unsigned int levels, unsigned int channels, unsigned int subwidth, unsigned int subheight, unsigned int reserved = STEP);
-        void Destroy();
+        TextureAtlas& operator=(TextureAtlas&& other);
+        TextureAtlas& operator=(const TextureAtlas& other) = delete;
 
-        int Add(const Texture2D& texture);
-        int Add(const std::vector<Texture2D>& textures);
+        void SetTextures(unsigned int count, const Texture2D* textures);
 
         void Bind(unsigned int slot) const;
 
         inline glm::ivec2 GetTextureSize() const noexcept { return { subwidth, subheight }; }
-        inline glm::ivec2 GetDimensions() const noexcept { return { length, length }; }
+        inline glm::ivec2 GetTableSize() const noexcept { return { width, height }; }
+        inline glm::ivec2 GetAtlasSize() const noexcept { return { width * subwidth, height * subheight }; }
 
     private:
-        void ValidateAndReallocate(unsigned int additional = 1);
-        int InternalAdd(const Texture2D& texture);
+        glm::ivec2 CalculateDimensions(unsigned int count) const;
 
     private:
-        Texture2D texture;
+        std::optional<Texture2D> texture;
         unsigned int subwidth, subheight;
-        unsigned int length, size;
-    };
-
-    class Renderer
-    {
-    public:
-        Renderer() = delete;
-
-        static void Init();
-        static void Destroy();
-
-        static void Render(Game::World& world, const Game::Player& player);
+        unsigned int width, height, size;
     };
 
     class ChunkRenderer
     {
     public:
-        ChunkRenderer() = delete;
+        enum class DrawMode { NORMAL, WIREFRAME };
 
-        static void Init();
-        static void Destroy();
+    public:
+        ChunkRenderer();
+        ChunkRenderer(ChunkRenderer&& other) = delete;
+        ChunkRenderer(const ChunkRenderer& other) = delete;
 
-        static void Begin();
-        static void Render(const Game::World& world);
-        static void End();
+        ~ChunkRenderer();
 
-        static int GetTextureID(const Game::Face& face);
+        ChunkRenderer& operator=(ChunkRenderer&& other) = delete;
+        ChunkRenderer& operator=(const ChunkRenderer& other) = delete;
 
-        static inline void SetViewMatrix(const glm::mat4& matrix) { view_matrix = matrix; }
-        static inline void SetProjectionMatrix(const glm::mat4& matrix) { projection_matrix = matrix; }
+        void Begin();
+        void Begin(FaceOrientation orientation);
+        void Render(const ChunkMesh& mesh);
+        void End();
 
-    private:
-        static int LoadTexture(const std::string& path);
+        int GetTextureID(const Game::Face& face);
+
+        inline void SetVPMatrix(const glm::mat4& vp_matrix) noexcept { this->vp_matrix = vp_matrix; }
+
+        inline void SetDrawMode(DrawMode mode) noexcept { draw_mode = mode; }
 
     private:
         struct BlockData
@@ -218,86 +219,186 @@ namespace Render
             int north = -1, south = -1, east = -1, west = -1, up = -1, down = -1;
         };
 
-        static TextureAtlas atlas;
-        static VFShader shader[3];
-        static int model_location[3], vp_location[3], atlas_dimensions_location[3], texture_size_location[3], texture_location[3];
-        static glm::mat4 view_matrix, projection_matrix;
-        static std::unordered_map<std::string, int> texture_IDs;
-        static std::vector<BlockData> blocks;
+        struct ChunkShader
+        {
+            VFShader shader;
+            int model_location;
+            int vp_location;
+            int atlas_dimensions_location;
+            int texture_size_location;
+            int texture_location;
+        };
+
+    private:
+        std::optional<Texture2D> LoadTexture(const char* path);
+        std::optional<ChunkShader> LoadShader(const char* vertex_path, const char* fragment_path);
+
+    private:
+        std::optional<TextureAtlas> atlas;
+        std::optional<ChunkShader> chunk_shaders[3];
+        std::optional<ChunkShader> wireframe_shader;
+
+        glm::mat4 vp_matrix;
+
+        std::vector<BlockData> blocks;
+
+        unsigned int active_pipeline;
+        DrawMode draw_mode;
     };
 
-    class RenderThread
+    struct FramebufferEvent
+    {
+        int x, y, width, height;
+    };
+
+    class Renderer
     {
     public:
-        static void Start();
-        static void Stop();
+        Renderer(GLFWwindow* window);
+        Renderer(Renderer&& other) = delete;
+        Renderer(const Renderer& other) = delete;
 
-        static void Submit(const std::shared_ptr<ChunkMesh>& mesh);
+        ~Renderer();
+
+        Renderer& operator=(Renderer&& other) = delete;
+        Renderer& operator=(const Renderer& other) = delete;
+
+        void Begin();
+        void End();
+
+        void SetViewport(float x, float y, float width, float height);
+        void SetVPMatrix(const glm::mat4& vp_matrix) noexcept;
+
+        inline ChunkRenderer& GetChunkRenderer() { return chunk_renderer.value(); }
 
     private:
-        RenderThread() = default;
-        ~RenderThread() = default;
-
-        static void Run();
-
-    private:
-        static RenderThread instance;
-        static std::thread thread;
-        static bool done;
-    };
-};
-
-namespace fmt
-{
-    template<>
-    struct formatter<Render::Vertex>
-    {
-        constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin())
-        {
-            return ctx.end();
-        }
-
-        template<typename FormatContext>
-        auto format(const Render::Vertex& vertex, FormatContext& ctx) -> decltype(ctx.out())
-        {
-            return fmt::format_to(ctx.out(), "{{encoded:{}}}", vertex.encoded);
-        }
+        std::optional<ChunkRenderer> chunk_renderer;
+        GLFWwindow* window;
     };
 
-    template<>
-    struct formatter<Render::FaceMesh>
+    namespace __detail
     {
-        constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin())
+        class ChunkMeshPool
         {
-            return ctx.end();
-        }
+        public:
+            typedef int Handle;
 
-        template<typename FormatContext>
-        auto format(const Render::FaceMesh& face, FormatContext& ctx) -> decltype(ctx.out())
-        {
-            return fmt::format_to(ctx.out(), "{{v[0]:{}, v[1]:{}, v[2]:{}, v[3]:{}}}", face.v[0], face.v[1], face.v[2], face.v[3]);
-        }
-    };
+            ChunkMeshPool();
+            ChunkMeshPool(ChunkMeshPool&& other);
+            ChunkMeshPool(const ChunkMeshPool& other);
 
-    template<>
-    struct formatter<Render::FaceOrientation>
-    {
-        constexpr auto parse(format_parse_context& ctx) -> decltype(ctx.begin())
-        {
-            return ctx.end();
-        }
+            ~ChunkMeshPool();
 
-        template<typename FormatContext>
-        auto format(const Render::FaceOrientation& orientation, FormatContext& ctx) -> decltype(ctx.out())
-        {
-            switch(orientation)
+            ChunkMeshPool& operator=(ChunkMeshPool&& other);
+            ChunkMeshPool& operator=(const ChunkMeshPool& other);
+
+            // "Client" side; called from any thread.
+            Handle New();
+            void Free(Handle handle);
+
+            inline bool Has(Handle handle) const { return sparse[handle] != -1 && meshes.size() > sparse[handle]; }
+
+            void SetFaces(Handle handle, std::vector<FaceMesh>& faces, FaceOrientation orientation);
+            void SetTransform(Handle handle, const Game::Transform& transform);
+            
+            // "Server" side; called from the render thread only.
+            void GarbageCollect();
+            void HandleRequests();
+
+            inline ChunkMesh& operator[](Handle handle) { return meshes[sparse[handle]]; }
+            inline const ChunkMesh& operator[](Handle handle) const { return meshes[sparse[handle]]; }
+
+            inline ChunkMesh& at(Handle handle) { return meshes.at(sparse.at(handle)); }
+            inline const ChunkMesh& at(Handle handle) const { return meshes.at(sparse.at(handle)); }
+
+            inline std::mutex& GetMutex() const { return mutex; }
+
+        private:
+            struct AllocRequest
             {
-            case Render::FaceOrientation::XOY: return fmt::format_to(ctx.out(), "XOY");
-            case Render::FaceOrientation::YOZ: return fmt::format_to(ctx.out(), "YOZ");
-            case Render::FaceOrientation::ZOX: return fmt::format_to(ctx.out(), "ZOX");
-            default: return fmt::format_to(ctx.out(), "");
-            }
-        }
+                std::atomic<bool>* fence;
+                Handle* value;
+            };
+
+            struct SetFacesRequest
+            {
+                Handle handle;
+                std::vector<FaceMesh> faces;
+                FaceOrientation orientation;
+            };
+
+        private:
+            std::vector<ChunkMesh> meshes;
+            std::vector<int> sparse;
+            std::queue<int> available;
+
+            std::queue<AllocRequest> alloc_requests;
+            std::queue<SetFacesRequest> set_faces_requests;
+
+            mutable std::mutex mutex;
+        };
+    };
+
+    class RenderThread : public Events::EventHandler<FramebufferEvent>
+    {
+    public:
+        typedef __detail::ChunkMeshPool ChunkMeshPool;
+        typedef ChunkMeshPool::Handle ChunkMeshHandle;
+
+        RenderThread(GLFWwindow* window);
+        RenderThread(RenderThread&& other) = delete;
+        RenderThread(const RenderThread& other) = delete;
+
+        ~RenderThread();
+
+        RenderThread& operator=(RenderThread&& other) = delete;
+        RenderThread& operator=(const RenderThread& other) = delete;
+
+        virtual void Handle(const FramebufferEvent& framebuffer_event) override;
+
+        void SetViewport(float x, float y, float width, float height);
+
+        void SetPlayer(const std::shared_ptr<Game::Player>& player);
+
+        ChunkMeshHandle NewChunkMesh();
+        void FreeChunkMesh(ChunkMeshHandle handle);
+
+        void SetChunkFaces(ChunkMeshHandle handle, std::vector<FaceMesh>& faces, FaceOrientation orientation);
+        void SetChunkTransform(ChunkMeshHandle handle, const Game::Transform& transform);
+
+        int GetBlockTextureID(const Game::Face& face);
+
+        void AddChunkToDrawCall(ChunkMeshHandle handle);
+        void RemoveChunkFromDrawCall(ChunkMeshHandle handle);
+
+        void SetChunkDrawMode(ChunkRenderer::DrawMode draw_mode);
+
+        inline const std::atomic<bool>& IsInitialized() const noexcept { return initialized; }
+    
+    private:
+        void Run(GLFWwindow* window);
+
+    private:
+        std::thread thread;
+        std::atomic<bool> exit;
+
+        std::atomic<bool> initialized;
+
+        ChunkMeshPool chunk_mesh_pool;
+
+        std::optional<Renderer> renderer;
+
+        std::unordered_set<ChunkMeshHandle> chunks_draw_set;
+        mutable std::mutex chunks_draw_set_mutex;
+
+        std::shared_ptr<Game::Player> player;
+        mutable std::mutex player_mutex;
+
+        mutable std::mutex chunk_render_mutex;
+
+        std::atomic<bool> viewport_changed;
+        int vp_x, vp_y, vp_width, vp_height;
+        mutable std::mutex viewport_mutex;
     };
 };
 

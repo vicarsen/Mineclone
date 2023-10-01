@@ -2,11 +2,11 @@
 
 #include <fstream>
 
-DEFINE_LOG_CATEGORY(Files, spdlog::level::trace, LOGFILE("Files.txt"));
+DEFINE_LOG_CATEGORY(Files, FILE_LOGGER(trace, LOGFILE("Files.txt")));
 
 namespace Files
 {
-    std::string ReadFile(const std::string& path)
+    std::string ReadFile(const char* path)
     {
         TRACE(Files, "[ReadFile] (#path:{})", path);
 

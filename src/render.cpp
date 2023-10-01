@@ -5,6 +5,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "glm.fmt.h"
+#include "blocks.fmt.h"
+
 #include <vector>
 #include <cassert>
 
@@ -13,32 +16,33 @@
 #include "stb_image.h"
 
 #include "world.h"
+#include "player.h"
 
-DEFINE_LOG_CATEGORY(OpenGLInternal, spdlog::level::trace, LOGFILE("Render/OpenGLInternal.txt"));
-DEFINE_LOG_CATEGORY(Shaders, spdlog::level::trace, LOGFILE("Render/Shaders.txt"));
-DEFINE_LOG_CATEGORY(DynamicFaceBuffer, spdlog::level::trace, LOGFILE("Render/DynamicFaceBuffer.txt"));
-DEFINE_LOG_CATEGORY(ChunkMesh, spdlog::level::trace, LOGFILE("Render/ChunkMesh.txt"));
-DEFINE_LOG_CATEGORY(Renderer, spdlog::level::trace, LOGFILE("Render/Renderer.txt"));
-DEFINE_LOG_CATEGORY(ChunkRenderer, spdlog::level::trace, LOGFILE("Render/ChunkRenderer.txt"));
+#include "application.h"
+
+DEFINE_LOG_CATEGORY(OpenGLInternal, FILE_LOGGER(trace, LOGFILE("Render/OpenGLInternal.txt")));
+DEFINE_LOG_CATEGORY(Shaders, FILE_LOGGER(trace, LOGFILE("Render/Shaders.txt")));
+DEFINE_LOG_CATEGORY(FaceBuffer, FILE_LOGGER(trace, LOGFILE("Render/FaceBuffer.txt")));
+DEFINE_LOG_CATEGORY(ChunkMesh, FILE_LOGGER(trace, LOGFILE("Render/ChunkMesh.txt")));
+DEFINE_LOG_CATEGORY(Renderer, FILE_LOGGER(trace, LOGFILE("Render/Renderer.txt")));
+DEFINE_LOG_CATEGORY(ChunkRenderer, FILE_LOGGER(trace, LOGFILE("Render/ChunkRenderer.txt")));
 
 namespace Render
 {
     static unsigned int g_ebo, g_service_buffer;
     
-    DynamicFaceBuffer::DynamicFaceBuffer(unsigned int _reserved)
+    FaceBuffer::FaceBuffer()
     {
-        TRACE(DynamicFaceBuffer, "[{}:constructor] (#_reserved:{})", (unsigned long long) this, _reserved);
+        TRACE(FaceBuffer, "[{}:constructor]", (unsigned long long) this);
 
-        reserved = _reserved; size = 0;
+        size = 0;
         glCreateBuffers(1, &buffer);
 
-        TRACE(DynamicFaceBuffer, "[{}:constructor] (buffer:{}) glCreateBuffer", (unsigned long long) this, buffer);
-
-        glNamedBufferData(buffer, reserved * sizeof(FaceMesh), NULL, GL_DYNAMIC_DRAW);
+        TRACE(FaceBuffer, "[{}:constructor] (buffer:{}) glCreateBuffer", (unsigned long long) this, buffer);
 
         glCreateVertexArrays(1, &vao);
 
-        TRACE(DynamicFaceBuffer, "[{}:constructor] (vao:{}) glCreateVertexArrays", (unsigned long long) this, vao);
+        TRACE(FaceBuffer, "[{}:constructor] (vao:{}) glCreateVertexArrays", (unsigned long long) this, vao);
 
         glVertexArrayVertexBuffer(vao, 0, buffer, 0, sizeof(Vertex));
         glVertexArrayElementBuffer(vao, g_ebo);
@@ -47,157 +51,70 @@ namespace Render
         glVertexArrayAttribIFormat(vao, 0, 1, GL_INT, offsetof(Vertex, encoded));
         glVertexArrayAttribBinding(vao, 0, 0);
 
-        std::memset(sparse, 0xff, sizeof(sparse));
-
-        TRACE(DynamicFaceBuffer, "[{}:constructor] return", (unsigned long long) this);
+        TRACE(FaceBuffer, "[{}:constructor] return", (unsigned long long) this);
     }
 
-    DynamicFaceBuffer::DynamicFaceBuffer(DynamicFaceBuffer&& other)
+    FaceBuffer::FaceBuffer(FaceBuffer&& other)
     {
-        TRACE(DynamicFaceBuffer, "[{}:move_constructor] (#other:{})", (unsigned long long) this, (unsigned long long) &other);
+        TRACE(FaceBuffer, "[{}:move_constructor] (#other:{})", (unsigned long long) this, (unsigned long long) &other);
 
-        std::memcpy(this, &other, sizeof(DynamicFaceBuffer));
+        std::memcpy(this, &other, sizeof(FaceBuffer));
         other.vao = other.buffer = 0;
     
-        TRACE(DynamicFaceBuffer, "[{}:move_constructor] (buffer:{}) (vao:{}) return", (unsigned long long) this, buffer, vao);
+        TRACE(FaceBuffer, "[{}:move_constructor] (buffer:{}) (vao:{}) return", (unsigned long long) this, buffer, vao);
     }
 
-    DynamicFaceBuffer::DynamicFaceBuffer(const DynamicFaceBuffer& other) :
-        DynamicFaceBuffer(other.reserved)
+    FaceBuffer::FaceBuffer(const FaceBuffer& other) :
+        FaceBuffer()
     {
+        glNamedBufferData(buffer, other.size * sizeof(FaceMesh), NULL, GL_STATIC_DRAW);
         glCopyNamedBufferSubData(other.buffer, buffer, 0, 0, other.size * sizeof(FaceMesh));
 
         size = other.size;
-        std::memcpy(sparse, other.sparse, sizeof(other.sparse));
     }
 
-    DynamicFaceBuffer::~DynamicFaceBuffer()
+    FaceBuffer::~FaceBuffer()
     {
-        TRACE(DynamicFaceBuffer, "[{}:destructor] (buffer:{}) (vao:{})", (unsigned long long) this, buffer, vao);
+        TRACE(FaceBuffer, "[{}:destructor] (buffer:{}) (vao:{})", (unsigned long long) this, buffer, vao);
 
-        if(vao) glDeleteVertexArrays(1, &vao);
-        if(buffer) glDeleteBuffers(1, &buffer);
+        if(vao != 0) glDeleteVertexArrays(1, &vao);
+        if(buffer != 0) glDeleteBuffers(1, &buffer);
 
-        TRACE(DynamicFaceBuffer, "[{}:destructor] return", (unsigned long long) this);
+        TRACE(FaceBuffer, "[{}:destructor] return", (unsigned long long) this);
     }
 
-    DynamicFaceBuffer& DynamicFaceBuffer::operator=(DynamicFaceBuffer&& other)
+    FaceBuffer& FaceBuffer::operator=(FaceBuffer&& other)
     {
-        TRACE(DynamicFaceBuffer, "[{}:move_assignment] (#other:{}) (buffer:{}) (vao:{})", (unsigned long long) this, (unsigned long long) &other, buffer, vao);
+        TRACE(FaceBuffer, "[{}:move_assignment] (#other:{}) (buffer:{}) (vao:{})", (unsigned long long) this, (unsigned long long) &other, buffer, vao);
 
-        if(vao) glDeleteVertexArrays(1, &vao);
-        if(buffer) glDeleteBuffers(1, &buffer);
+        if(vao != 0) glDeleteVertexArrays(1, &vao);
+        if(buffer != 0) glDeleteBuffers(1, &buffer);
 
-        std::memcpy(this, &other, sizeof(DynamicFaceBuffer));
+        std::memcpy(this, &other, sizeof(FaceBuffer));
         other.vao = other.buffer = 0;
 
-        TRACE(DynamicFaceBuffer, "[{}:move_assignment] return", (unsigned long long) this);
+        TRACE(FaceBuffer, "[{}:move_assignment] return", (unsigned long long) this);
         return *this;
     }
 
-    DynamicFaceBuffer& DynamicFaceBuffer::operator=(const DynamicFaceBuffer& other)
+    FaceBuffer& FaceBuffer::operator=(const FaceBuffer& other)
     {
-        if(reserved < other.size)
-        {
-            glNamedBufferData(buffer, other.reserved * sizeof(FaceMesh), NULL, GL_DYNAMIC_DRAW);
-            reserved = other.reserved;
-        }
-
+        glNamedBufferData(buffer, other.size * sizeof(FaceMesh), NULL, GL_STATIC_DRAW);
         glCopyNamedBufferSubData(other.buffer, buffer, 0, 0, other.size * sizeof(FaceMesh));
 
         size = other.size;
-        std::memcpy(sparse, other.sparse, sizeof(other.sparse));
-
         return *this;
     }
 
-    void DynamicFaceBuffer::Insert(unsigned int faceID, const FaceMesh& face)
+    void FaceBuffer::SetData(unsigned int count, const FaceMesh* meshes)
     {
-        TRACE(DynamicFaceBuffer, "[{}:Insert] (#faceID:{}) (#face:{})", (unsigned long long) this, faceID, face);
-
-        ValidateAndReallocate(1);
-        glNamedBufferSubData(buffer, sizeof(FaceMesh) * size, sizeof(FaceMesh), &face);
-        sparse[faceID] = size++;
-
-        TRACE(DynamicFaceBuffer, "[{}:Insert] (size:{}) return", (unsigned long long) this, size);
+        glNamedBufferData(buffer, count * sizeof(FaceMesh), meshes, GL_STATIC_DRAW);
+        size = count;
     }
 
-    void DynamicFaceBuffer::Remove(unsigned int faceID)
-    {
-        TRACE(DynamicFaceBuffer, "[{}:Remove] (#faceID:{})", (unsigned long long) this, faceID);
-
-        if(sparse[faceID] != size - 1)
-            glCopyNamedBufferSubData(buffer, buffer, sizeof(FaceMesh) * (size - 1), sizeof(FaceMesh) * sparse[faceID], sizeof(FaceMesh));
-        
-        sparse[faceID] = -1;
-        size--;
-        ValidateAndReallocate();
-
-        TRACE(DynamicFaceBuffer, "[{}:Remove] (size:{}) return", (unsigned long long) this, size);
-    }
-
-    void DynamicFaceBuffer::InsertMany(unsigned int count, const unsigned int* faceIDs, const FaceMesh* faces)
-    {
-        TRACE(DynamicFaceBuffer, "[{}:InsertMany] (#count:{}) (#faceIDs:{}) (#faces:{})", (unsigned long long) this, count, (unsigned long long) faceIDs, (unsigned long long) faces);
-
-        ValidateAndReallocate(count);
-        glNamedBufferSubData(buffer, sizeof(FaceMesh) * size, sizeof(FaceMesh) * count, faces);
-        for(unsigned int i = 0; i < count; i++)
-            sparse[faceIDs[i]] = sizeof(FaceMesh) * (size + i);
-        size += count;
-
-        TRACE(DynamicFaceBuffer, "[{}:InsertMany] (size:{}) return", (unsigned long long) this, size);
-    }
-
-    void DynamicFaceBuffer::RemoveMany(unsigned int count, const unsigned int* faceIDs)
-    {
-        TRACE(DynamicFaceBuffer, "[{}:RemoveMany] (#count:{}) (faceIDs:{})", (unsigned long long) this, count, (unsigned long long) faceIDs);
-
-        for(unsigned int i = 0; i < count; i++)
-        {
-            if(sparse[faceIDs[i]] != size - 1)
-                glCopyNamedBufferSubData(buffer, buffer, sizeof(FaceMesh) * (size - 1), sizeof(FaceMesh) * sparse[faceIDs[i]], sizeof(FaceMesh));
-            sparse[faceIDs[i]] = -1;
-            size--;
-        }
-
-        ValidateAndReallocate();
-
-        TRACE(DynamicFaceBuffer, "[{}:RemoveMany] (size:{})", (unsigned long long) this, size);
-    }
-
-    void DynamicFaceBuffer::Clear()
-    {
-        TRACE(DynamicFaceBuffer, "[{}:Clear] <>", (unsigned long long) this);
-
-        size = 0;
-    }
-
-    void DynamicFaceBuffer::Bind() const
+    void FaceBuffer::Bind() const
     {
         glBindVertexArray(vao);
-    }
-
-    void DynamicFaceBuffer::ValidateAndReallocate(unsigned int additional)
-    {
-        TRACE(DynamicFaceBuffer, "[{}:ValidateAndReallocate] (#additional:{}) (size:{}) (reserved:{})", (unsigned long long) this, additional, size, reserved);
-
-        if(size + additional > reserved)
-        {
-            reserved = size + additional + STEP;
-            glCopyNamedBufferSubData(buffer, g_service_buffer, 0, 0, size * sizeof(FaceMesh));
-            glNamedBufferData(buffer, reserved * sizeof(FaceMesh), NULL, GL_DYNAMIC_DRAW);
-            glCopyNamedBufferSubData(g_service_buffer, buffer, 0, 0, size * sizeof(FaceMesh));
-        }
-        else if(size + additional + STEP + HALF_STEP < reserved)
-        {
-            reserved = size + additional + HALF_STEP;
-            glCopyNamedBufferSubData(buffer, g_service_buffer, 0, 0, size * sizeof(FaceMesh));
-            glNamedBufferData(buffer, reserved * sizeof(FaceMesh), NULL, GL_DYNAMIC_DRAW);
-            glCopyNamedBufferSubData(g_service_buffer, buffer, 0, 0, size * sizeof(FaceMesh));
-        }
-
-        TRACE(DynamicFaceBuffer, "[{}:ValidateAndReallocate] (reserved:{}) return", (unsigned long long) this, reserved);
     }
 
     ChunkMesh::ChunkMesh()
@@ -208,12 +125,25 @@ namespace Render
     ChunkMesh::ChunkMesh(ChunkMesh&& other) :
         buffers
         {
-            DynamicFaceBuffer(std::move(other.buffers[0])),
-            DynamicFaceBuffer(std::move(other.buffers[1])),
-            DynamicFaceBuffer(std::move(other.buffers[2]))
-        }
+            FaceBuffer(std::move(other.buffers[0])),
+            FaceBuffer(std::move(other.buffers[1])),
+            FaceBuffer(std::move(other.buffers[2]))
+        },
+        model_matrix(std::move(other.model_matrix))
     {
         TRACE(ChunkMesh, "[{}:move_constructor] (other:{}) <>", (unsigned long long) this, (unsigned long long) &other);
+    }
+
+    ChunkMesh::ChunkMesh(const ChunkMesh& other) :
+        buffers
+        {
+            other.buffers[0],
+            other.buffers[1],
+            other.buffers[2]
+        },
+        model_matrix(other.model_matrix)
+    {
+        TRACE(ChunkMesh, "[{}:copy_constructor] (other:{}) <>", (unsigned long long) this, (unsigned long long) &other);
     }
 
     ChunkMesh::~ChunkMesh()
@@ -228,6 +158,16 @@ namespace Render
         buffers[0] = std::move(other.buffers[0]);
         buffers[1] = std::move(other.buffers[1]);
         buffers[2] = std::move(other.buffers[2]);
+        model_matrix = std::move(other.model_matrix);
+        return *this;
+    }
+
+    ChunkMesh& ChunkMesh::operator=(const ChunkMesh& other)
+    {
+        buffers[0] = other.buffers[0];
+        buffers[1] = other.buffers[1];
+        buffers[2] = other.buffers[2];
+        model_matrix = other.model_matrix;
         return *this;
     }
 
@@ -240,8 +180,8 @@ namespace Render
     {
         FaceMesh mesh;
 
-        int encoded = encode(position.x, position.y, position.z, ChunkRenderer::GetTextureID(face));
-        switch(face.GetDirection())
+        int encoded = 0;//encode(position.x, position.y, position.z, ChunkRenderer::GetTextureID(face));
+        switch(face.direction)
         {
         case Game::Direction::SOUTH:
         case Game::Direction::WEST:
@@ -274,7 +214,7 @@ namespace Render
             break;
         }
 
-        switch(face.GetDirection())
+        switch(face.direction)
         {
         case Game::Direction::SOUTH:
         case Game::Direction::WEST:
@@ -288,224 +228,14 @@ namespace Render
         return mesh;
     }
 
-    static unsigned int FaceID(const glm::ivec3& position)
+    void ChunkMesh::SetFaces(unsigned int count, const FaceMesh* meshes, FaceOrientation orientation)
     {
-        return position.z + (CHUNK_SIZE + 1) * (position.y + (CHUNK_SIZE + 1) * position.x);
-    }
-
-    void ChunkMesh::PlaceFace(const glm::ivec3& position, FaceOrientation orientation, Game::Face face)
-    {
-        TRACE(ChunkMesh, "[{}:PlaceFace] (#position:{}) (#orientation:{}) (#face:{})", (unsigned long long) this, position, orientation, face);
-
-        FaceMesh mesh = GenerateFaceMesh(position, orientation, face);
-        buffers[(unsigned int) orientation].Insert(FaceID(position), mesh);
-
-        TRACE(ChunkMesh, "[{}:PlaceFace] return", (unsigned long long) this);
-    }
-
-    void ChunkMesh::RemoveFace(const glm::ivec3& position, FaceOrientation orientation)
-    {
-        TRACE(ChunkMesh, "[{}:RemoveFace] (#position:{}) (#orientation:{})", (unsigned long long) this, position, orientation);
-
-        buffers[(unsigned int) orientation].Remove(FaceID(position));
-
-        TRACE(ChunkMesh, "[{}:RemoveFace] return", (unsigned long long) this);
-    }
-
-    void ChunkMesh::PlaceManyFaces(unsigned int count, const glm::ivec3* positions, FaceOrientation orientation, const Game::Face* faces)
-    {
-        TRACE(ChunkMesh, "[{}:PlaceManyFaces] (#count:{}) (#positions:{}) (#orientation:{}) (#faces:{})", (unsigned long long) this, count, (unsigned long long) positions, orientation, (unsigned long long) faces);
-
-        std::vector<FaceMesh> meshes(count);
-        std::vector<unsigned int> faceIDs(count);
-        for(unsigned int i = 0; i < count; i++)
-        {
-            meshes[i] = GenerateFaceMesh(positions[i], orientation, faces[i]);
-            faceIDs[i] = FaceID(positions[i]);
-        }
-
-        buffers[(unsigned int) orientation].InsertMany(count, faceIDs.data(), meshes.data());
-
-        TRACE(ChunkMesh, "[{}:PlaceManyFaces] return", (unsigned long long) this);
-    }
-
-    void ChunkMesh::PlaceManyFaces(unsigned int count, const glm::ivec3* positions, FaceOrientation orientation, Game::Face face)
-    {
-        TRACE(ChunkMesh, "[{}:PlaceManyFaces] (#count:{}) (#positions:{}) (#orientation:{}) (#face:{})", (unsigned long long) this, count, (unsigned long long) positions, orientation, face);
-
-        std::vector<FaceMesh> meshes(count);
-        std::vector<unsigned int> faceIDs(count);
-        for(unsigned int i = 0; i < count; i++)
-        {
-            meshes[i] = GenerateFaceMesh(positions[i], orientation, face);
-            faceIDs[i] = FaceID(positions[i]);
-        }
-
-        buffers[(unsigned int) orientation].InsertMany(count, faceIDs.data(), meshes.data());
-
-        TRACE(ChunkMesh, "[{}:PlaceManyFaces] return", (unsigned long long) this);
-    }
-
-    void ChunkMesh::RemoveManyFaces(unsigned int count, const glm::ivec3* positions, FaceOrientation orientation)
-    {
-        TRACE(ChunkMesh, "[{}:RemoveManyFaces] (#count:{}) (#positions:{}) (#orientation:{})", (unsigned long long) this, count, (unsigned long long) positions, orientation);
-
-        std::vector<unsigned int> faceIDs(count);
-        for(unsigned int i = 0; i < count; i++)
-            faceIDs[i] = FaceID(positions[i]);
-
-        buffers[(unsigned int) orientation].RemoveMany(count, faceIDs.data());
-
-        TRACE(ChunkMesh, "[{}:RemoveManyFaces] return", (unsigned long long) this);
-    }
-
-    void ChunkMesh::ClearFaces(FaceOrientation orientation)
-    {
-        TRACE(ChunkMesh, "[{}:ClearFaces] (#orientation:{}) <>", (unsigned long long) this, orientation);
-
-        buffers[(unsigned int) orientation].Clear();
-    }
-
-    bool ChunkMesh::HasFace(FaceOrientation orientation, const glm::ivec3& position)
-    {
-        return buffers[(unsigned int) orientation].Has(FaceID(position));
+        buffers[(unsigned int) orientation].SetData(count, meshes);
     }
 
     void ChunkMesh::Bind(unsigned int buffer) const
     {
         buffers[buffer].Bind();
-    }
-
-    void Texture2D::Init(unsigned int _levels, unsigned int _channels, unsigned int _width, unsigned int _height)
-    {
-        levels = _levels; channels = _channels; width = _width; height = _height;
-        format = (channels == 3 ? GL_RGB8 : GL_RGBA8);
-
-        glCreateTextures(GL_TEXTURE_2D, 1, &texture);
-
-        glTextureParameteri(texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTextureParameteri(texture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-        glTextureStorage2D(texture, levels, format, width, height);
-    }
-
-    void Texture2D::Destroy()
-    {
-        glDeleteTextures(1, &texture);
-    }
-
-    void Texture2D::SetStyle(TextureStyle _style)
-    {
-        style = _style;
-
-        switch(style)
-        {
-        case TextureStyle::PIXELATED:
-            glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
-            glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-            break;
-        case TextureStyle::SMOOTH:
-            glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-            glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-            break;
-        }
-    }
-
-    void Texture2D::SetData(const unsigned char* data, unsigned int level, unsigned int channels)
-    {
-        GLenum format = (channels == 3 ? GL_RGB : GL_RGBA);
-        glTextureSubImage2D(texture, level, 0, 0, width >> level, height >> level, format, GL_UNSIGNED_BYTE, data);
-    }
-
-    void Texture2D::SetData(const unsigned char* data, unsigned int level, unsigned int channels, unsigned int x, unsigned int y, unsigned int width, unsigned int height)
-    {
-        GLenum format = (channels == 3 ? GL_RGB : GL_RGBA);
-        glTextureSubImage2D(texture, level, x >> level, y >> level, width >> level, height >> level,format, GL_UNSIGNED_BYTE, data);
-    }
-
-    void Texture2D::CopyData(const Texture2D& other, unsigned int srcLevel, unsigned int srcX, unsigned int srcY, unsigned int dstLevel, unsigned int dstX, unsigned int dstY, unsigned int width, unsigned int height)
-    {
-        glCopyImageSubData(other.texture, GL_TEXTURE_2D, srcLevel, srcX >> srcLevel, srcY >> srcLevel, 0, texture, GL_TEXTURE_2D, dstLevel, dstX >> dstLevel, dstY >> dstLevel, 0, width >> srcLevel, height >> srcLevel, 1);
-    }
-
-    void Texture2D::GenerateMipmaps()
-    {
-        glGenerateTextureMipmap(texture);
-    }
-
-    void Texture2D::Bind(unsigned int slot) const
-    {
-        glBindTextureUnit(slot, texture);
-        
-    }
-
-    void TextureAtlas::Init(unsigned int levels, unsigned int channels, unsigned int _subwidth, unsigned int _subheight, unsigned int reserved)
-    {
-        subwidth = _subwidth; subheight = _subheight;
-        length = reserved; size = 0;
-        texture.Init(levels, channels, subwidth * length, subheight * length);
-        texture.SetStyle(TextureStyle::PIXELATED);
-    }
-
-    void TextureAtlas::Destroy()
-    {
-        texture.Destroy();
-    }
-
-    int TextureAtlas::Add(const Texture2D& texture)
-    {
-        ValidateAndReallocate();
-        return InternalAdd(texture);
-    }
-
-    int TextureAtlas::Add(const std::vector<Texture2D>& textures)
-    {
-        int idx = size;
-        ValidateAndReallocate(textures.size());
-        for(const Texture2D& texture : textures)
-            InternalAdd(texture);
-        return idx;
-    }
-
-    void TextureAtlas::Bind(unsigned int slot) const
-    {
-        texture.Bind(slot);
-    }
-
-    void TextureAtlas::ValidateAndReallocate(unsigned int additional)
-    {
-        unsigned int newLength = length;
-        while(size + additional > newLength * newLength)
-            newLength += STEP;
-        //while(size + additional + 2 * newLength * (STEP + HALF_STEP) < newLength * newLength + (STEP + HALF_STEP) * (STEP + HALF_STEP))
-        //    newLength -= STEP;
-
-        if(length != newLength)
-        {
-            Texture2D newTexture;
-            newTexture.Init(texture.GetLevels(), texture.GetChannelCount(), subwidth * newLength, subheight * newLength);
-            newTexture.SetStyle(TextureStyle::PIXELATED);
-            for(unsigned int level = 0; level < texture.GetLevels(); level++)
-                for(unsigned int i = 0; i < size; i++)
-                {
-                    glm::ivec2 position = { i / length, i % length };
-                    glm::ivec2 newPosition = { i / newLength, i % newLength };
-
-                    newTexture.CopyData(texture, level, position.x * subwidth, position.y * subheight, level, newPosition.x * subwidth, newPosition.y * subheight, subwidth, subheight);
-                }
-
-            texture.Destroy();
-            texture = newTexture;
-        }
-    }
-
-    int TextureAtlas::InternalAdd(const Texture2D& _texture)
-    {
-        int idx = size++;
-        glm::ivec2 position = glm::ivec2 { idx / length, idx % length } * glm::ivec2 { subwidth, subheight };
-        for(unsigned int level = 0; level < texture.GetLevels(); level++)
-            texture.CopyData(_texture, level, 0, 0, level, position.x, position.y, subwidth, subheight);
-        return idx;
     }
 
     static const char* ShaderTypeToString(unsigned int type)
@@ -556,47 +286,48 @@ namespace Render
         return shader;
     }
 
-    void VFShader::Init(const std::string& vertexSrc, const std::string& fragmentSrc)
+    VFShader::VFShader(const char* vertex_src_file, const char* fragment_src_file)
     {
-        TRACE(Shaders, "[{}:Init] (#vertexSrc:{}) (#fragmentSrc:{})", (unsigned long long) this, vertexSrc, fragmentSrc);
+        TRACE(Shaders, "[{}:constructor] (#vertex_src:{}) (#fragment_src:{})", (unsigned long long) this, vertex_src_file, fragment_src_file);
 
-        unsigned int vertexShader = CreateShader(vertexSrc, GL_VERTEX_SHADER);
-        unsigned int fragmentShader = CreateShader(fragmentSrc, GL_FRAGMENT_SHADER);
+        std::string vertex_src = Files::ReadFile(vertex_src_file);
+        std::string fragment_src = Files::ReadFile(fragment_src_file);
 
-        TRACE(Shaders, "[{}:Init] (vertexShader:{}) (fragmentShader:{})", (unsigned long long) this, vertexShader, fragmentShader);
+        unsigned int vertex_shader = CreateShader(vertex_src, GL_VERTEX_SHADER);
+        unsigned int fragment_shader = CreateShader(fragment_src, GL_FRAGMENT_SHADER);
 
-        if(vertexShader == 0)
+        if(vertex_shader == 0)
         {
-            ERROR(Shaders, "[{}:Init] vertex shader create error", (unsigned long long) this);
+            ERROR(Shaders, "[{}:constructor] vertex shader create error", (unsigned long long) this);
             return;
         }
 
-        if(fragmentShader == 0)
+        if(fragment_shader == 0)
         {
-            ERROR(Shaders, "[{}:Init] fragment shader create error", (unsigned long long) this);
+            ERROR(Shaders, "[{}:constructor] fragment shader create error", (unsigned long long) this);
             return;
         }
 
         program = glCreateProgram();
 
-        TRACE(Shaders, "[{}:Init] (program:{})", (unsigned long long) this, program);
-        
-        glAttachShader(program, vertexShader);
-        glAttachShader(program, fragmentShader);
+        TRACE(Shaders, "[{}:constructor] (program:{})", (unsigned long long) this, program);
 
-        TRACE(Shaders, "[{}:Init] link", (unsigned long long) this);
+        glAttachShader(program, vertex_shader);
+        glAttachShader(program, fragment_shader);
+
+        TRACE(Shaders, "[{}:constructor] link", (unsigned long long) this);
 
         glLinkProgram(program);
 
-        TRACE(Shaders, "[{}:Init] link return", (unsigned long long) this);
+        TRACE(Shaders, "[{}:constructor] link return", (unsigned long long) this);
 
-        glDetachShader(program, vertexShader);
-        glDetachShader(program, fragmentShader);
+        glDetachShader(program, vertex_shader);
+        glDetachShader(program, fragment_shader);
 
-        TRACE(Shaders, "[{}:Init] (vertexShader:{}) (fragmentShader:{}) vertex, fragment deleted");
+        TRACE(Shaders, "[{}:constructor] (vertex_shader:{}) (fragment_shader:{}) vertex, fragment deleted");
 
-        glDeleteShader(vertexShader);
-        glDeleteShader(fragmentShader);
+        glDeleteShader(vertex_shader);
+        glDeleteShader(fragment_shader);
 
         int status;
         glGetProgramiv(program, GL_LINK_STATUS, &status);
@@ -608,20 +339,36 @@ namespace Render
             std::vector<char> message(log_length + 1, 0);
             glGetProgramInfoLog(program, log_length, &log_length, message.data());
 
-            ERROR(Shaders, "[{}:Init] (message:{}) link error", (unsigned long long) this, message.data());
+            ERROR(Shaders, "[{}:constructor] (message:{}) link error", (unsigned long long) this, message.data());
 
             glDeleteProgram(program);
             return;
         }
 
-        TRACE(Shaders, "[{}:Init] return", (unsigned long long) this);
+        TRACE(Shaders, "[{}:constructor] return", (unsigned long long) this);
     }
 
-    void VFShader::Destroy()
+    VFShader::VFShader(VFShader&& other)
     {
-        TRACE(Shaders, "[{}:Destroy] (program:{}) <>", (unsigned long long) this, program);
+        program = other.program;
+        other.program = 0;
+    }
+
+    VFShader::~VFShader()
+    {
+        TRACE(Shaders, "[{}:destructor] (program:{}) <>", (unsigned long long) this, program);
 
         glDeleteProgram(program);
+    }
+
+    VFShader& VFShader::operator=(VFShader&& other)
+    {
+        if(program) glDeleteProgram(program);
+
+        program = other.program;
+        other.program = 0;
+        
+        return *this;
     }
 
     void VFShader::Bind() const
@@ -629,12 +376,152 @@ namespace Render
         glUseProgram(program);
     }
 
-    int VFShader::GetUniformLocation(const std::string& name)
+    int VFShader::GetUniformLocation(const char* name)
     {
-        int location = glGetUniformLocation(program, name.c_str());
+        int location = glGetUniformLocation(program, name);
 
         TRACE(Shaders, "[{}:GetUniformLocation] (#name:{}) (location: {}) <>", (unsigned long long) this, name, location);
         return location;
+    }
+
+    Texture2D::Texture2D(unsigned int _levels, unsigned int _channels, unsigned int _width, unsigned int _height)
+    {
+        levels = _levels; channels = _channels; width = _width; height = _height;
+        format = (channels == 3 ? GL_RGB8 : GL_RGBA8);
+
+        glCreateTextures(GL_TEXTURE_2D, 1, &texture);
+
+        glTextureParameteri(texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTextureParameteri(texture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        glTextureStorage2D(texture, levels, format, width, height);
+    }
+
+    Texture2D::Texture2D(Texture2D&& other) :
+        texture(other.texture), width(other.width), height(other.height), channels(other.channels), levels(other.levels), format(other.format), style(other.style)
+    {
+        other.texture = 0;
+    }
+
+    Texture2D::~Texture2D()
+    {
+        if(texture != 0) glDeleteTextures(1, &texture);
+    }
+
+    Texture2D& Texture2D::operator=(Texture2D&& other)
+    {
+        if(texture != 0) glDeleteTextures(1, &texture);
+
+        texture = other.texture;
+        width = other.width; height = other.height;
+        channels = other.channels; levels = other.levels; style = other.style;
+
+        other.texture = 0;
+        return *this;
+    }
+
+    void Texture2D::SetStyle(TextureStyle _style)
+    {
+        style = _style;
+
+        switch(style)
+        {
+        case TextureStyle::PIXELATED:
+            glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_NEAREST_MIPMAP_NEAREST);
+            glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            break;
+        case TextureStyle::SMOOTH:
+            glTextureParameteri(texture, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+            glTextureParameteri(texture, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            break;
+        }
+    }
+
+    void Texture2D::SetData(const unsigned char* data, unsigned int level, unsigned int channels)
+    {
+        GLenum format = (channels == 3 ? GL_RGB : GL_RGBA);
+        glTextureSubImage2D(texture, level, 0, 0, width >> level, height >> level, format, GL_UNSIGNED_BYTE, data);
+    }
+
+    void Texture2D::SetData(const unsigned char* data, unsigned int level, unsigned int channels, unsigned int x, unsigned int y, unsigned int width, unsigned int height)
+    {
+        GLenum format = (channels == 3 ? GL_RGB : GL_RGBA);
+        glTextureSubImage2D(texture, level, x >> level, y >> level, width >> level, height >> level,format, GL_UNSIGNED_BYTE, data);
+    }
+
+    void Texture2D::CopyData(const Texture2D& other, unsigned int srcLevel, unsigned int srcX, unsigned int srcY, unsigned int dstLevel, unsigned int dstX, unsigned int dstY, unsigned int width, unsigned int height)
+    {
+        glCopyImageSubData(other.texture, GL_TEXTURE_2D, srcLevel, srcX >> srcLevel, srcY >> srcLevel, 0, texture, GL_TEXTURE_2D, dstLevel, dstX >> dstLevel, dstY >> dstLevel, 0, width >> srcLevel, height >> srcLevel, 1);
+    }
+
+    void Texture2D::GenerateMipmaps()
+    {
+        glGenerateTextureMipmap(texture);
+    }
+
+    void Texture2D::Bind(unsigned int slot) const
+    {
+        glBindTextureUnit(slot, texture);
+    }
+
+    TextureAtlas::TextureAtlas()
+    {
+    }
+
+    TextureAtlas::TextureAtlas(TextureAtlas&& other) :
+        texture(std::move(other.texture)), subwidth(other.subwidth), subheight(other.subheight), width(other.width), height(other.height), size(other.size)
+    {
+    }
+
+    TextureAtlas::~TextureAtlas()
+    {
+    }
+
+    TextureAtlas& TextureAtlas::operator=(TextureAtlas&& other)
+    {
+        texture = std::move(other.texture);
+        subwidth = other.subwidth;
+        subheight = other.subheight;
+        width = other.width;
+        height = other.height;
+        size = other.size;
+        return *this;
+    }
+
+    void TextureAtlas::SetTextures(unsigned int count, const Texture2D* textures)
+    {
+        glm::ivec2 dimensions = CalculateDimensions(count);
+
+        width = dimensions.x; height = dimensions.y;
+        subwidth = textures[0].GetWidth(); subheight = textures[0].GetHeight();
+        size = count;
+
+        Texture2D newTexture(textures[0].GetLevels(), textures[0].GetChannelCount(), subwidth * width, subheight * height);
+        newTexture.SetStyle(TextureStyle::PIXELATED);
+
+        texture = std::move(newTexture);
+        for(unsigned int i = 0; i < count; i++)
+        {
+            unsigned int x = i / height;
+            unsigned int y = i % height;
+
+            for(unsigned int j = 0; j < texture->GetLevels(); j++)
+                texture->CopyData(textures[i], j, 0, 0, j, x * subwidth, y * subheight, subwidth, subheight);
+        }
+    }
+
+    void TextureAtlas::Bind(unsigned int slot) const
+    {
+        texture->Bind(slot);
+    }
+
+    glm::ivec2 TextureAtlas::CalculateDimensions(unsigned int count) const
+    {
+        glm::ivec2 dimensions;
+        for(unsigned int i = 1; i * i <= count; i++)
+            if(count % i == 0)
+                dimensions = { i, count / i };
+        return dimensions;
     }
 
     static void MessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, GLchar const* message, void const* user_param)
@@ -674,23 +561,32 @@ namespace Render
         }
     }
 
-    void Renderer::Init()
+    static void GLFWFramebufferSizeCallback(GLFWwindow* window, int width, int height)
     {
-        TRACE(Renderer, "[Init]");
+        Application::Get()->DispatchEvent<FramebufferEvent>(0, 0, width, height);
+    }
 
-        TRACE(Renderer, "[Init] load OpenGL");
-        GLFWwindow* window = Window::GetInternalWindow();
+    Renderer::Renderer(GLFWwindow* _window) :
+        window(_window)
+    {
+        stbi_set_flip_vertically_on_load(true);
+
+        TRACE(Renderer, "[{}:constructor]", (unsigned long long) this);
+
+        TRACE(Renderer, "[{}:constructor] load OpenGL", (unsigned long long) this);
 
         glfwMakeContextCurrent(window);
         if(!gladLoadGL(glfwGetProcAddress))
         {
-            CRITICAL(Renderer, "[Init] failed to load OpenGL");
+            CRITICAL(Renderer, "[{}:constructor] failed to load OpenGL", (unsigned long long) this);
             return;
         }
 
+        glfwSetFramebufferSizeCallback(window, GLFWFramebufferSizeCallback);
+
         glfwSwapInterval(0);
 
-        TRACE(Renderer, "[Init] load OpenGL return");
+        TRACE(Renderer, "[{}:constructor] load OpenGL return", (unsigned long long) this);
 
         glEnable(GL_DEBUG_OUTPUT);
         glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
@@ -702,60 +598,47 @@ namespace Render
         glCreateBuffers(1, &g_service_buffer);
         glNamedBufferStorage(g_service_buffer, 1024 * 1024 * 128, NULL, GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT);
 
-        TRACE(Renderer, "[Init] (g_service_buffer:{})", g_service_buffer);
+        TRACE(Renderer, "[{}:constructor] (g_service_buffer:{})", (unsigned long long) this, g_service_buffer);
 
-        ChunkRenderer::Init();
+        chunk_renderer.emplace();
 
-        TRACE(Renderer, "[Init] return");
+        TRACE(Renderer, "[{}:constructor] return");
     }
 
-    void Renderer::Destroy()
+    Renderer::~Renderer()
     {
-        TRACE(Renderer, "[Destroy]");
+        TRACE(Renderer, "[{}:destructor]", (unsigned long long) this);
 
-        ChunkRenderer::Destroy();
+        chunk_renderer.reset();
 
         glDeleteBuffers(1, &g_service_buffer);
-    
-        TRACE(Renderer, "[Destroy] return");
+
+        TRACE(Renderer, "[{}:destructor] return", (unsigned long long) this);
     }
 
-    void Renderer::Render(Game::World& world, const Game::Player& player)
+    void Renderer::Begin()
     {
         glClearColor(0.1f, 0.2f, 0.8f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
 
-        ChunkRenderer::SetViewMatrix(glm::inverse(player.GetTransform().GetMatrix()));
-        ChunkRenderer::SetProjectionMatrix(player.GetProjection());
+    void Renderer::SetViewport(float x, float y, float width, float height)
+    {
+        glViewport(x, y, width, height);
+    }
 
-        {
-            std::lock_guard<Game::World> guard(world);
-            for(auto& chunk : world.GetChunks())
-            {
-                if(!chunk.IsGeometryBuilt())
-                    chunk.BuildGeometry();
-            }
+    void Renderer::SetVPMatrix(const glm::mat4& vp_matrix) noexcept
+    {
+        chunk_renderer->SetVPMatrix(vp_matrix);
+    }
 
-            ChunkRenderer::Begin();
-            ChunkRenderer::Render(world);
-            ChunkRenderer::End();
-        }
-
-        GLFWwindow* window = Window::GetInternalWindow();
+    void Renderer::End()
+    {
         glfwSwapBuffers(window);
     }
 
-    TextureAtlas ChunkRenderer::atlas;
-    VFShader ChunkRenderer::shader[3];
-    int ChunkRenderer::model_location[3], ChunkRenderer::vp_location[3], ChunkRenderer::atlas_dimensions_location[3], ChunkRenderer::texture_size_location[3], ChunkRenderer::texture_location[3];
-    glm::mat4 ChunkRenderer::view_matrix, ChunkRenderer::projection_matrix;
-    std::unordered_map<std::string, int> ChunkRenderer::texture_IDs;
-    std::vector<ChunkRenderer::BlockData> ChunkRenderer::blocks;
-
-    void ChunkRenderer::Init()
+    ChunkRenderer::ChunkRenderer()
     {
-        TRACE(ChunkRenderer, "[Init]");
-
         unsigned int face_count = (CHUNK_SIZE + 1) * (CHUNK_SIZE + 1) * (CHUNK_SIZE + 1);
         std::vector<unsigned int> indices(face_count * 6);
         for(unsigned int i = 0; i < face_count; i++)
@@ -769,117 +652,175 @@ namespace Render
         }
 
         glCreateBuffers(1, &g_ebo);
-        TRACE(ChunkRenderer, "[Init] (face_count:{}) (g_ebo:{})", face_count, g_ebo);
-
         glNamedBufferStorage(g_ebo, sizeof(unsigned int) * face_count * 6, indices.data(), GL_DYNAMIC_STORAGE_BIT);
 
-        shader[0].Init(Files::ReadFile(PATH("shaders/chunk_packed_64x64x64_xy.vert.glsl")), Files::ReadFile(PATH("shaders/chunk_packed_64x64x64.frag.glsl")));
-        vp_location[0] = shader[0].GetUniformLocation("u_vp");
-        model_location[0] = shader[0].GetUniformLocation("u_model");
-        atlas_dimensions_location[0] = shader[0].GetUniformLocation("u_atlasDimensions");
-        texture_size_location[0] = shader[0].GetUniformLocation("u_textureSize");
-        texture_location[0] = shader[0].GetUniformLocation("u_texture");
+        chunk_shaders[0] = std::move(LoadShader(PATH("shaders/chunk_packed_64x64x64_xy.vert.glsl"), PATH("shaders/chunk_packed_64x64x64.frag.glsl")));
+        
+        chunk_shaders[1] = std::move(LoadShader(PATH("shaders/chunk_packed_64x64x64_yz.vert.glsl"), PATH("shaders/chunk_packed_64x64x64.frag.glsl")));
 
-        TRACE(ChunkRenderer, "[Init] (vp_location[0]:{}) (model_location[0]:{})", vp_location[0], model_location[0]);
+        chunk_shaders[2] = std::move(LoadShader(PATH("shaders/chunk_packed_64x64x64_zx.vert.glsl"), PATH("shaders/chunk_packed_64x64x64.frag.glsl")));
 
-        shader[1].Init(Files::ReadFile(PATH("shaders/chunk_packed_64x64x64_yz.vert.glsl")), Files::ReadFile(PATH("shaders/chunk_packed_64x64x64.frag.glsl")));
-        vp_location[1] = shader[1].GetUniformLocation("u_vp");
-        model_location[1] = shader[1].GetUniformLocation("u_model");
-        atlas_dimensions_location[1] = shader[1].GetUniformLocation("u_atlasDimensions");
-        texture_size_location[1] = shader[1].GetUniformLocation("u_textureSize");
-        texture_location[1] = shader[1].GetUniformLocation("u_texture");
-
-        TRACE(ChunkRenderer, "[Init] (vp_location[1]:{}) (model_location[1]:{})", vp_location[1], model_location[1]);
-
-        shader[2].Init(Files::ReadFile(PATH("shaders/chunk_packed_64x64x64_zx.vert.glsl")), Files::ReadFile(PATH("shaders/chunk_packed_64x64x64.frag.glsl")));
-        vp_location[2] = shader[2].GetUniformLocation("u_vp");
-        model_location[2] = shader[2].GetUniformLocation("u_model");
-        atlas_dimensions_location[2] = shader[2].GetUniformLocation("u_atlasDimensions");
-        texture_size_location[2] = shader[2].GetUniformLocation("u_textureSize");
-        texture_location[2] = shader[2].GetUniformLocation("u_texture");
-
-        TRACE(ChunkRenderer, "[Init] (vp_location[2]:{}) (model_location[2]:{})", vp_location[2], model_location[2]);
-
-        for(unsigned int i = 0; i < 3; i++)
+        if(!chunk_shaders[0].has_value() || !chunk_shaders[1].has_value() || !chunk_shaders[2].has_value())
         {
-            if(vp_location[i] == -1)
-            {
-                CRITICAL(ChunkRenderer, "[Init] vp_location[{}] missing error", i);
-                return;
-            }
-
-            if(model_location[i] == -1)
-            {
-                CRITICAL(ChunkRenderer, "[Init] model_location[{}] missing error", i);
-                return;
-            }
-
-            if(atlas_dimensions_location[i] == -1)
-            {
-                CRITICAL(ChunkRenderer, "[Init] atlas_dimensions_location[{}] missing error", i);
-                return;
-            }
-
-            if(texture_size_location[i] == -1)
-            {
-                CRITICAL(ChunkRenderer, "[Init] texture_size_location[{}] missing error", i);
-                //return;
-            }
-
-            if(texture_location[i] == -1)
-            {
-                CRITICAL(ChunkRenderer, "[Init] texture_location[{}] missing error", i);
-                //return;
-            }
+            ERROR(ChunkRenderer, "[{}:constructor] Failed to load some shaders!", (unsigned long long) this);
+            return;
         }
 
-        atlas.Init(4, 3, 32, 32);
+        wireframe_shader.emplace(std::move(VFShader(PATH("shaders/chunk_packed_wireframe.vert.glsl"), PATH("shaders/chunk_packed_wireframe.frag.glsl"))));
 
-        TRACE(ChunkRenderer, "[Init] return");
+        wireframe_shader->model_location = wireframe_shader->shader.GetUniformLocation("u_model");
+        wireframe_shader->vp_location = wireframe_shader->shader.GetUniformLocation("u_vp");
+
+        draw_mode = DrawMode::NORMAL;
+        
+        std::vector<Texture2D> textures;
+        std::unordered_map<std::string, unsigned int> texture_IDs;
+
+        auto get_texture = [&](const std::string& path)
+        {
+            if(path.empty())
+                return 0u;
+
+            if(texture_IDs.find(path) == texture_IDs.end())
+            {
+                std::optional<Texture2D> texture = LoadTexture(path.c_str());
+                if(texture.has_value())
+                {
+                    texture_IDs[path] = textures.size();
+                    textures.emplace_back(std::move(*texture));
+                }
+                else texture_IDs[path] = 0u;
+            }
+            
+            return texture_IDs[path];
+        };
+
+        for(auto block_it = Game::BlockRegistry::Begin(); block_it != Game::BlockRegistry::End(); block_it++)
+        {
+            block_it->render_attachment = blocks.size();
+
+            auto& block = blocks.emplace_back();
+            block.north = get_texture(block_it->metadata.face_north);
+            block.south = get_texture(block_it->metadata.face_south);
+            block.east = get_texture(block_it->metadata.face_east);
+            block.west = get_texture(block_it->metadata.face_west);
+            block.up = get_texture(block_it->metadata.face_up);
+            block.down = get_texture(block_it->metadata.face_down);
+        }
+
+        atlas.emplace();
+        atlas->SetTextures(textures.size(), textures.data());
+    
+        textures.clear();
     }
 
-    void ChunkRenderer::Destroy()
+    ChunkRenderer::~ChunkRenderer()
     {
-        TRACE(ChunkRenderer, "[Destroy]");
+        atlas.reset();
 
-        atlas.Destroy();
+        wireframe_shader.reset();
 
         for(unsigned int i = 0; i < 3; i++)
-            shader[i].Destroy();
+            chunk_shaders[i].reset();
 
         glDeleteBuffers(1, &g_ebo);
+    }
 
-        TRACE(ChunkRenderer, "[Destroy] return");
+    std::optional<ChunkRenderer::ChunkShader> ChunkRenderer::LoadShader(const char* vertex_path, const char* fragment_path)
+    {
+        ChunkShader shader { .shader = VFShader(vertex_path, fragment_path) };
+        
+        shader.vp_location = shader.shader.GetUniformLocation("u_vp");
+        if(shader.vp_location == -1)
+        {
+            ERROR(ChunkRenderer, "[{}:LoadShader] (vertex_path:{}) (fragment_path:{}) u_vp uniform doesn't exist", (unsigned long long) this, vertex_path, fragment_path);
+            return std::nullopt;
+        }
+
+        shader.model_location = shader.shader.GetUniformLocation("u_model");
+        if(shader.model_location == -1)
+        {
+            ERROR(ChunkRenderer, "[{}:LoadShader] (vertex_path:{}) (fragment_path:{}) u_model uniform doesn't exist", (unsigned long long) this, vertex_path, fragment_path);
+            return std::nullopt;
+        }
+
+        shader.atlas_dimensions_location = shader.shader.GetUniformLocation("u_atlas_dimensions");
+        if(shader.atlas_dimensions_location == -1)
+        {
+            ERROR(ChunkRenderer, "[{}:LoadShader] (vertex_path:{}) (fragment_path:{}) u_atlas_dimensions uniform doesn't exist", (unsigned long long) this, vertex_path, fragment_path);
+            return std::nullopt;
+        }
+
+        shader.texture_size_location = shader.shader.GetUniformLocation("u_texture_size");
+        if(shader.texture_size_location == -1)
+        {
+            ERROR(ChunkRenderer, "[{}:LoadShader] (vertex_path:{}) (fragment_path:{}) u_texture_size uniform doesn't exist", (unsigned long long) this, vertex_path, fragment_path);
+            return std::nullopt;
+        }
+
+        shader.texture_location = shader.shader.GetUniformLocation("u_texture");
+        if(shader.texture_location == -1)
+        {
+            ERROR(ChunkRenderer, "[{}:LoadShader] (vertex_path:{}) (fragment_path:{}) u_texture uniform doesn't exist", (unsigned long long) this, vertex_path, fragment_path);
+            return std::nullopt;
+        }
+
+        return shader;
     }
 
     void ChunkRenderer::Begin()
     {
+        atlas->Bind(0);
     }
 
-    void ChunkRenderer::Render(const Game::World& world)
+    void ChunkRenderer::Begin(FaceOrientation orientation)
     {
-        glm::mat4 vp_matrix = projection_matrix * view_matrix;
+        active_pipeline = (unsigned int) orientation;
 
-        atlas.Bind(0);
-
-        for(unsigned int i = 0; i < 3; i++)
+        switch(draw_mode)
         {
-            shader[i].Bind();
-
-            glUniformMatrix4fv(vp_location[i], 1, GL_FALSE, glm::value_ptr(vp_matrix));
-            glUniform2i(atlas_dimensions_location[i], atlas.GetDimensions().x, atlas.GetDimensions().y);
-            glUniform2f(texture_size_location[i], atlas.GetTextureSize().x, atlas.GetTextureSize().y);
-            glUniform1i(texture_location[i], 0);
-
-            for(const Game::Chunk& chunk : world.GetChunks())
+        case DrawMode::NORMAL:
             {
-                glm::mat4 model_matrix = chunk.GetTransform().GetMatrix();
-                glUniformMatrix4fv(model_location[i], 1, GL_FALSE, glm::value_ptr(model_matrix));
+                ChunkShader& shader = chunk_shaders[active_pipeline].value();
                 
-                chunk.GetMesh().Bind(i);
-                glDrawElements(GL_TRIANGLES, chunk.GetMesh().Size(i) * 6, GL_UNSIGNED_INT, NULL);
+                shader.shader.Bind();
+                glUniformMatrix4fv(shader.vp_location, 1, GL_FALSE, glm::value_ptr(vp_matrix));
+                glUniform2i(shader.atlas_dimensions_location, atlas->GetTableSize().x, atlas->GetTableSize().y);
+                glUniform2f(shader.texture_size_location, atlas->GetTextureSize().x, atlas->GetTextureSize().y);
+                glUniform1i(shader.texture_location, 0);
+                break;
+            }
+        case DrawMode::WIREFRAME:
+            {
+                ChunkShader& shader = wireframe_shader.value();
+
+                shader.shader.Bind();
+                glUniformMatrix4fv(shader.vp_location, 1, GL_FALSE, glm::value_ptr(vp_matrix));
+                break;
             }
         }
+    }
+
+    void ChunkRenderer::Render(const ChunkMesh& mesh)
+    {
+        switch(draw_mode)
+        {
+        case DrawMode::NORMAL:
+            {
+                ChunkShader& shader = chunk_shaders[active_pipeline].value();
+                glUniformMatrix4fv(shader.model_location, 1, GL_FALSE, glm::value_ptr(mesh.GetModelMatrix()));
+                break;
+            }
+        case DrawMode::WIREFRAME:
+            {
+                ChunkShader& shader = wireframe_shader.value();
+                glUniformMatrix4fv(shader.model_location, 1, GL_FALSE, glm::value_ptr(mesh.GetModelMatrix()));
+                break;
+            }
+        }
+
+        mesh.Bind(active_pipeline);
+        glDrawElements(GL_TRIANGLES, mesh.BufferSize(active_pipeline) * 6, GL_UNSIGNED_INT, NULL);
     }
 
     void ChunkRenderer::End()
@@ -888,112 +829,364 @@ namespace Render
 
     int ChunkRenderer::GetTextureID(const Game::Face& face)
     {
-        Game::BlockID block = face.GetBlock();
-        Game::Direction direction = face.GetDirection();
+        auto block_cit = Game::BlockRegistry::CFind(face.block);
+        unsigned int idx = block_cit->render_attachment;
 
-        if(blocks.size() <= block)
-            blocks.resize(block + 1);
-
-        switch(direction)
+        switch(face.direction)
         {
-        case Game::Direction::NORTH:
-            if(blocks[block].north == -1)
-                blocks[block].north = LoadTexture(Game::BlockBase::GetFaceTexture(block, direction));
-            return blocks[block].north;
-        
-        case Game::Direction::SOUTH:
-            if(blocks[block].south == -1)
-                blocks[block].south = LoadTexture(Game::BlockBase::GetFaceTexture(block, direction));
-            return blocks[block].south;
-        
-        case Game::Direction::EAST:
-            if(blocks[block].east == -1)
-                blocks[block].east = LoadTexture(Game::BlockBase::GetFaceTexture(block, direction));
-            return blocks[block].east;
-        
-        case Game::Direction::WEST:
-            if(blocks[block].west == -1)
-                blocks[block].west = LoadTexture(Game::BlockBase::GetFaceTexture(block, direction));
-            return blocks[block].west;
-        
-        case Game::Direction::UP:
-            if(blocks[block].up == -1)
-                blocks[block].up = LoadTexture(Game::BlockBase::GetFaceTexture(block, direction));
-            return blocks[block].up;
-
-        case Game::Direction::DOWN:
-            if(blocks[block].down == -1)
-                blocks[block].down = LoadTexture(Game::BlockBase::GetFaceTexture(block, direction));
-            return blocks[block].down;
+        case Game::Direction::NORTH: return blocks[idx].north;
+        case Game::Direction::SOUTH: return blocks[idx].south;
+        case Game::Direction::EAST: return blocks[idx].east;
+        case Game::Direction::WEST: return blocks[idx].west;
+        case Game::Direction::UP: return blocks[idx].up;
+        case Game::Direction::DOWN: return blocks[idx].down;
+        default: return 0;
         }
     }
 
-    int ChunkRenderer::LoadTexture(const std::string& path)
+    std::optional<Texture2D> ChunkRenderer::LoadTexture(const char* path)
     {
-        if(texture_IDs.find(path) == texture_IDs.end())
+        int width, height, channels;
+        unsigned char* data = stbi_load(path, &width, &height, &channels, 0);
+
+        if(data == nullptr)
         {
-            stbi_set_flip_vertically_on_load(true);
+            ERROR(ChunkRenderer, "[LoadTexture] (#path:{}) failed to load texture", path);
+            return std::nullopt;
+        }
+        
+        Texture2D texture(4, 3, width, height);
+        texture.SetData(data, 0, channels);
+        texture.GenerateMipmaps();
 
-            int width, height, channels;
-            unsigned char* data = stbi_load(path.c_str(), &width, &height, &channels, 0);
+        stbi_image_free(data);
+        return texture;
+    }
 
-            if(data == nullptr)
+    namespace __detail
+    {
+        ChunkMeshPool::ChunkMeshPool()
+        {
+        }
+
+        ChunkMeshPool::ChunkMeshPool(ChunkMeshPool&& other) :
+            meshes(std::move(other.meshes)), sparse(std::move(other.sparse)), available(std::move(other.available)), alloc_requests(std::move(other.alloc_requests)), set_faces_requests(std::move(other.set_faces_requests))
+        {
+        }
+
+        ChunkMeshPool::ChunkMeshPool(const ChunkMeshPool& other) :
+            meshes(other.meshes), sparse(other.sparse), available(other.available), alloc_requests(other.alloc_requests), set_faces_requests(other.set_faces_requests)
+        {
+        }
+
+        ChunkMeshPool::~ChunkMeshPool()
+        {
+        }
+
+        ChunkMeshPool& ChunkMeshPool::operator=(ChunkMeshPool&& other)
+        {
+            meshes = std::move(other.meshes);
+            sparse = std::move(other.sparse);
+            available = std::move(other.available);
+            alloc_requests = std::move(other.alloc_requests);
+            set_faces_requests = std::move(other.set_faces_requests);
+            return *this;
+        }
+
+        ChunkMeshPool& ChunkMeshPool::operator=(const ChunkMeshPool& other)
+        {
+            meshes = other.meshes;
+            sparse = other.sparse;
+            available = other.available;
+            alloc_requests = other.alloc_requests;
+            set_faces_requests = other.set_faces_requests;
+            return *this;
+        }
+
+        ChunkMeshPool::Handle ChunkMeshPool::New()
+        {
+            std::atomic<bool> fence = false;
+            Handle handle;
+
             {
-                ERROR(ChunkRenderer, "[LoadTexture] (#path:{}) failed to load texture", path);
-                return -1;
+                std::lock_guard<std::mutex> guard(mutex);
+
+                if(!available.empty())
+                {
+                    handle = available.front(); available.pop();
+                    meshes[handle].SetHandle(handle);
+                    
+                    if(sparse.size() <= handle)
+                        sparse.resize(handle + 1, -1);
+
+                    sparse[handle] = handle;
+                    fence = true;
+                }
+                else alloc_requests.emplace(&fence, &handle);
             }
 
-            if(width != atlas.GetTextureSize().x)
+            while(fence == false);
+            return handle;
+        }
+
+        void ChunkMeshPool::Free(Handle handle)
+        {
+            std::lock_guard<std::mutex> guard(mutex);
+            available.emplace(sparse[handle]);
+            meshes[sparse[handle]].SetHandle(-1);
+            sparse[handle] = -1;
+        }
+
+        void ChunkMeshPool::SetFaces(Handle handle, std::vector<FaceMesh>& faces, FaceOrientation orientation)
+        {
+            std::lock_guard<std::mutex> guard(mutex);
+            set_faces_requests.emplace(handle, std::move(faces), orientation);
+        }
+
+        void ChunkMeshPool::SetTransform(Handle handle, const Game::Transform& transform)
+        {
+            std::lock_guard<std::mutex> guard(mutex);
+            meshes[sparse[handle]].SetModelMatrix(transform.GetMatrix());
+        }
+
+        void ChunkMeshPool::HandleRequests()
+        {
+            std::lock_guard<std::mutex> guard(mutex);
+
+            while(!alloc_requests.empty())
             {
-                ERROR(ChunkRenderer, "[LoadTexture] (#path:{}) (width:{}) (height:{}) (atlas.GetTextureSize().x:{}) width not valid", path, width, height, atlas.GetTextureSize().x);
-                return -1;
+                auto[fence, handle] = alloc_requests.front(); alloc_requests.pop();
+                
+                if(available.empty())
+                {
+                    *handle = meshes.size();
+                    meshes.emplace_back().SetHandle(*handle);
+                }
+                else
+                {
+                    *handle = available.front(); available.pop();
+                    meshes[*handle].SetHandle(*handle);
+                }
+
+                if(sparse.size() <= *handle)
+                    sparse.resize(*handle + 1, -1);
+
+                sparse[*handle] = *handle;
+                *fence = true;
             }
 
-            if(height != atlas.GetTextureSize().y)
+            while(!set_faces_requests.empty())
             {
-                ERROR(ChunkRenderer, "[LoadTexture] (#path:{}) (width:{}) (height:{}) (atlas.GetTextureSize().y:{}) height not valid", path, width, height, atlas.GetTextureSize().y);
-                return -1;
-            }
+                auto& handle = set_faces_requests.front().handle;
+                auto& faces = set_faces_requests.front().faces;
+                auto& orientation = set_faces_requests.front().orientation;
+
+                meshes[sparse[handle]].SetFaces(faces.size(), faces.data(), orientation);
             
-            Texture2D texture;
-            texture.Init(4, 3, width, height);
-            texture.SetData(data, 0, channels);
-            texture.GenerateMipmaps();
-
-            stbi_image_free(data);
-
-            texture_IDs[path] = atlas.Add(texture);
-            texture.Destroy();
+                set_faces_requests.pop();
+            }
         }
 
-        return texture_IDs[path];
+        void ChunkMeshPool::GarbageCollect()
+        {
+            std::lock_guard<std::mutex> guard(mutex);
+
+            // Very basic (and inefficient) algorithm, but should be fine for our application.
+            // TODO Could be improved in the future.
+            while(available.size() >= CHUNK_SIZE * CHUNK_SIZE * 3)
+            {
+                int idx = available.front(); available.pop();
+
+                if(idx != meshes.size() - 1)
+                {
+                    meshes[idx] = std::move(meshes.back());
+                    int handle = meshes[idx].GetHandle();
+                    if(handle != -1)
+                        sparse[handle] = idx;
+                }
+
+                meshes.pop_back();
+            }
+
+            while(available.size() < CHUNK_SIZE * CHUNK_SIZE)
+            {
+                available.emplace(meshes.size());
+                meshes.emplace_back().SetHandle(-1);
+            }
+        }
+    };
+
+    RenderThread::RenderThread(GLFWwindow* window)
+    {
+        exit = false;
+        initialized = false;
+        thread = std::move(std::thread([&]() { Run(window); }));
     }
 
-    RenderThread RenderThread::instance;
-    std::thread RenderThread::thread;
-    bool RenderThread::done;
-
-    void RenderThread::Start()
+    RenderThread::~RenderThread()
     {
-        thread = std::thread(RenderThread::Run);
-    }
-
-    void RenderThread::Stop()
-    {
-        done = true;
+        exit = true;
         thread.join();
     }
 
-    void RenderThread::Run()
+    void RenderThread::Handle(const FramebufferEvent& framebuffer_event)
     {
-        Renderer::Init();
-        
-        while(!done)
+        SetViewport(framebuffer_event.x, framebuffer_event.y, framebuffer_event.width, framebuffer_event.height);
+    }
+
+    void RenderThread::SetViewport(float x, float y, float width, float height)
+    {
+        std::lock_guard<std::mutex> guard(viewport_mutex);
+        vp_x = x; vp_y = y; vp_width = width; vp_height = height;
+        viewport_changed = true;
+    }
+
+    void RenderThread::SetPlayer(const std::shared_ptr<Game::Player>& player)
+    {
+        std::lock_guard<std::mutex> guard(player_mutex);
+        this->player = player;
+    }
+
+    RenderThread::ChunkMeshHandle RenderThread::NewChunkMesh()
+    {
+        return chunk_mesh_pool.New();
+    }
+
+    void RenderThread::FreeChunkMesh(ChunkMeshHandle handle)
+    {
+        chunk_mesh_pool.Free(handle);
+    }
+
+    void RenderThread::SetChunkFaces(ChunkMeshHandle handle, std::vector<FaceMesh>& faces, FaceOrientation orientation)
+    {
+        chunk_mesh_pool.SetFaces(handle, faces, orientation);
+    }
+
+    void RenderThread::SetChunkTransform(ChunkMeshHandle handle, const Game::Transform& transform)
+    {
+        chunk_mesh_pool.SetTransform(handle, transform);
+    }
+
+    int RenderThread::GetBlockTextureID(const Game::Face& face)
+    {
+        return renderer->GetChunkRenderer().GetTextureID(face);
+    }
+
+    void RenderThread::AddChunkToDrawCall(ChunkMeshHandle handle)
+    {
+        std::lock_guard<std::mutex> guard(chunks_draw_set_mutex);
+        chunks_draw_set.emplace(handle);
+    }
+
+    void RenderThread::RemoveChunkFromDrawCall(ChunkMeshHandle handle)
+    {
+        std::lock_guard<std::mutex> guard(chunks_draw_set_mutex);
+        chunks_draw_set.erase(handle);
+    }
+
+    void RenderThread::SetChunkDrawMode(ChunkRenderer::DrawMode draw_mode)
+    {
+        std::lock_guard<std::mutex> guard(chunk_render_mutex);
+        renderer->GetChunkRenderer().SetDrawMode(draw_mode);
+    }
+
+    void RenderThread::Run(GLFWwindow* window)
+    {
+        renderer.emplace(window);
+        ChunkRenderer& chunk_renderer = renderer->GetChunkRenderer();
+
         {
-            
+            std::lock_guard<std::mutex> guard(viewport_mutex);
+
+            viewport_changed = false;
+            glfwGetFramebufferSize(window, &vp_width, &vp_height);
+            vp_x = vp_y = 0;
         }
 
-        Renderer::Destroy();
+        initialized = true;
+
+        float last_time = glfwGetTime();
+        int count = 0;
+        while(!exit)
+        {
+            float render_start_time = glfwGetTime();
+
+            chunk_mesh_pool.HandleRequests();
+            chunk_mesh_pool.GarbageCollect();
+
+            {
+                std::lock_guard<std::mutex> guard(viewport_mutex);
+
+                if(viewport_changed)
+                {
+                    viewport_changed = false;
+                    renderer->SetViewport(vp_x, vp_y, vp_width, vp_height);
+
+                    std::lock_guard<std::mutex> player_guard(player_mutex);
+                    if(player)
+                        player->SetAspectRatio(vp_width * 1.0f / vp_height);
+                }
+            }
+
+            static glm::mat4 vp_matrix = glm::mat4(1.0f);
+            
+            {
+                std::lock_guard<std::mutex> player_guard(player_mutex);
+                if(player)
+                    vp_matrix = player->GetProjection() * glm::inverse(player->GetTransform().GetMatrix());
+            }
+
+            renderer->Begin();
+                
+            renderer->SetVPMatrix(vp_matrix);
+
+            {
+                std::lock_guard<std::mutex> chunk_render_guard(chunk_render_mutex);
+                chunk_renderer.Begin();
+
+                std::unordered_set<ChunkMeshHandle> chunks_draw_set_copy;
+
+                {
+                    std::lock_guard<std::mutex> chunks_draw_set_guard(chunks_draw_set_mutex);
+                    chunks_draw_set_copy = chunks_draw_set;
+                }
+
+                for(unsigned int i = 0; i < 3; i++)
+                {
+                    chunk_renderer.Begin((FaceOrientation) i);
+                    for(ChunkMeshHandle handle : chunks_draw_set_copy)
+                    {
+                        std::lock_guard<std::mutex> chunk_mesh_pool_guard(chunk_mesh_pool.GetMutex());
+                        if(chunk_mesh_pool.Has(handle))
+                            chunk_renderer.Render(chunk_mesh_pool.at(handle));
+                    }
+                }
+ 
+                chunk_renderer.End();
+            }
+
+            renderer->End();
+
+            float render_end_time = glfwGetTime();
+            float render_time = render_end_time - render_start_time;
+
+            float sleep_time = (render_time < 1.0f / 144.0f ? 1.0f / 144.0f - render_time : 0.0f);
+
+            if(sleep_time != 0.0f)
+                std::this_thread::sleep_for(std::chrono::microseconds((long long) (sleep_time * 1'000'000.0f)));
+
+            count++;
+
+            float time = glfwGetTime();
+            if(time - last_time >= 5.0f)
+            {
+                WARN(LogTemp, "Render avg: {} fps", count / (time - last_time));
+                last_time = time;
+                count = 0;
+            }
+        }
+
+        renderer.reset();
     }
 };
 

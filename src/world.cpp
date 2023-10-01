@@ -1,11 +1,82 @@
 #include "world.h"
+#include "GLFW/glfw3.h"
+
+#include "glm.fmt.h"
+#include "render.fmt.h"
+#include "blocks.fmt.h"
 
 #include "mathematics.h"
-
 #include "files.h"
 
-DEFINE_LOG_CATEGORY(Chunk, spdlog::level::trace, LOGFILE("World/Chunk.txt"));
-DEFINE_LOG_CATEGORY(World, spdlog::level::trace, LOGFILE("World/World.txt"));
+#include "application.h"
+
+#include <unordered_set>
+#include <queue>
+
+DEFINE_LOG_CATEGORY(Chunk, FILE_LOGGER(trace, LOGFILE("World/Chunk.txt")));
+DEFINE_LOG_CATEGORY(World, FILE_LOGGER(trace, LOGFILE("world/World.txt")));
+
+static constexpr int encode(int x, int y, int z, int texture)
+{
+    return (texture) | (z << 11) | (y << 18) | (x << 25);
+}
+
+static int face_count = 0;
+
+static Render::FaceMesh GenerateFaceMesh(const glm::ivec3& position, Render::FaceOrientation orientation, const Game::Face& face)
+{
+    face_count++;
+
+    Render::FaceMesh mesh;
+
+    Render::RenderThread& render_thread = Application::Get()->GetRenderThread();
+    int encoded = encode(position.x, position.y, position.z, render_thread.GetBlockTextureID(face));
+    switch(face.direction)
+    {
+    case Game::Direction::SOUTH:
+    case Game::Direction::WEST:
+    case Game::Direction::DOWN:
+        encoded |= (1 << 10);
+        break;
+    default:
+        break;
+    }
+
+    switch(orientation)
+    {
+    case Render::FaceOrientation::XOY:
+        mesh.v[0].encoded = encoded + encode(0, 0, 0, 0);
+        mesh.v[1].encoded = encoded + encode(1, 0, 0, 0);
+        mesh.v[2].encoded = encoded + encode(1, 1, 0, 0);
+        mesh.v[3].encoded = encoded + encode(0, 1, 0, 0);
+        break;
+    case Render::FaceOrientation::YOZ:
+        mesh.v[0].encoded = encoded + encode(0, 0, 0, 0);
+        mesh.v[1].encoded = encoded + encode(0, 1, 0, 0);
+        mesh.v[2].encoded = encoded + encode(0, 1, 1, 0);
+        mesh.v[3].encoded = encoded + encode(0, 0, 1, 0);
+        break;
+    case Render::FaceOrientation::ZOX:
+        mesh.v[0].encoded = encoded + encode(0, 0, 0, 0);
+        mesh.v[1].encoded = encoded + encode(0, 0, 1, 0);
+        mesh.v[2].encoded = encoded + encode(1, 0, 1, 0);
+        mesh.v[3].encoded = encoded + encode(1, 0, 0, 0);
+        break;
+    }
+
+    switch(face.direction)
+    {
+    case Game::Direction::SOUTH:
+    case Game::Direction::WEST:
+    case Game::Direction::DOWN:
+        std::swap(mesh.v[1], mesh.v[3]);
+        break;
+    default:
+        break;
+    }
+
+    return mesh;
+}
 
 namespace Game
 {
@@ -14,86 +85,54 @@ namespace Game
         TRACE(Chunk, "[{}:constructor] <>", (unsigned long long) this);
 
         std::memset(blocks, 0, sizeof(blocks));
-        std::memset(flags, 0, sizeof(flags));
+        mesh_handle = -1;
     }
 
     Chunk::Chunk(Chunk&& other) :
-        transform(other.transform), coords(other.coords), mesh(std::move(other.mesh)), places(std::move(other.places)), 
-        faceRemove{std::move(other.faceRemove[0]), std::move(other.faceRemove[1]), std::move(other.faceRemove[2])},
-        facePlace{std::move(other.facePlace[0]), std::move(other.facePlace[1]), std::move(other.facePlace[2])},
-        faceToPlace{std::move(other.faceToPlace[0]), std::move(other.faceToPlace[1]), std::move(other.faceToPlace[2])},
-        geometry_built(other.geometry_built)//, lazy_build(other.lazy_build)
+        transform(other.transform), coords(other.coords), geometry_built(other.geometry_built), mesh_handle(other.mesh_handle)
     {
         TRACE(Chunk, "[{}:move_constructor] (#other:{}) <>", (unsigned long long) this, (unsigned long long) &other);
 
         std::memcpy(blocks, other.blocks, sizeof(blocks));
-        std::memcpy(flags, other.flags, sizeof(flags));
+        other.mesh_handle = -1;
     }
 
     Chunk::~Chunk()
     {
         TRACE(Chunk, "[{}:destructor] <>", (unsigned long long) this);
+
+        if(mesh_handle != -1) 
+        {
+            Render::RenderThread& render_thread = Application::Get()->GetRenderThread();
+            
+            render_thread.RemoveChunkFromDrawCall(mesh_handle);
+            render_thread.FreeChunkMesh(mesh_handle);
+        }
     }
 
     Chunk& Chunk::operator=(Chunk&& other)
     {
         TRACE(Chunk, "[{}:move_assignment] (#other:{})", (unsigned long long) this, (unsigned long long) &other);
 
-        transform = other.transform;
-        coords = other.coords;
-        mesh = std::move(other.mesh);
-        std::memcpy(blocks, other.blocks, sizeof(blocks));
-        std::memcpy(flags, other.flags, sizeof(flags));
-
-        places = std::move(other.places);
-
-        for(int i = 0; i < 3; i++)
+        if(mesh_handle != -1) 
         {
-            faceRemove[i] = std::move(other.faceRemove[i]);
-            facePlace[i] = std::move(other.facePlace[i]);
-            faceToPlace[i] = std::move(other.faceToPlace[i]);
+            Render::RenderThread& render_thread = Application::Get()->GetRenderThread();
+            
+            render_thread.RemoveChunkFromDrawCall(mesh_handle);
+            render_thread.FreeChunkMesh(mesh_handle);
         }
 
+        transform = other.transform;
+        coords = other.coords;
+
+        std::memcpy(blocks, other.blocks, sizeof(blocks));
+
         geometry_built = other.geometry_built;
-        lazy_build = other.lazy_build;
+        mesh_handle = other.mesh_handle;
+        other.mesh_handle = -1;
 
         TRACE(Chunk, "[{}:move_assignment] return", (unsigned long long) this);
         return *this;
-    }
-
-    void Chunk::__Deprecated_PlaceBlock(const glm::ivec3& position, BlockID block)
-    {
-        if((flags[position.x][position.y][position.z] & BLOCKFLAG_REPLACED) == 0)
-        {
-            places.emplace(position);
-
-            if(mesh.HasFace(Render::FaceOrientation::XOY, position))
-                faceRemove[(int) Render::FaceOrientation::XOY].emplace_back(position);
-
-            if(mesh.HasFace(Render::FaceOrientation::YOZ, position))
-                faceRemove[(int) Render::FaceOrientation::YOZ].emplace_back(position);
-
-            if(mesh.HasFace(Render::FaceOrientation::ZOX, position))
-                faceRemove[(int) Render::FaceOrientation::ZOX].emplace_back(position);
-
-            if(mesh.HasFace(Render::FaceOrientation::XOY, { position.x, position.y, position.z + 1 }))
-                faceRemove[(int) Render::FaceOrientation::XOY].emplace_back(position.x, position.y, position.z + 1);
-
-            if(mesh.HasFace(Render::FaceOrientation::YOZ, { position.x + 1, position.y, position.z }))
-                faceRemove[(int) Render::FaceOrientation::YOZ].emplace_back(position.x + 1, position.y, position.z);
-
-            if(mesh.HasFace(Render::FaceOrientation::ZOX, { position.x, position.y + 1, position.z }))
-                faceRemove[(int) Render::FaceOrientation::ZOX].emplace_back(position.x, position.y + 1, position.z);
-            
-            flags[position.x][position.y][position.z] |= BLOCKFLAG_REPLACED;
-        }
-
-        blocks[position.x][position.y][position.z] = block;
-    }
-
-    void Chunk::__Deprecated_RemoveBlock(const glm::ivec3& position)
-    {
-        PlaceBlock(position, 0);
     }
 
     void Chunk::PlaceBlock(const glm::ivec3& position, BlockID block)
@@ -110,233 +149,329 @@ namespace Game
 
     void Chunk::BuildGeometry()
     {
-        TRACE(Chunk, "[{}:BuildGeometry]", (unsigned long long) this);
-        //if(lazy_build)
-        //{
+        PROFILE_FUNCTION();
+
+        static thread_local Face faces[3][CHUNK_SIZE + 1][CHUNK_SIZE][CHUNK_SIZE];
+        static thread_local bool empty[3][CHUNK_SIZE + 1];
+        
+        bool is_chunk_empty = true;
+        for(int x = 0; x < CHUNK_SIZE && is_chunk_empty; x++)
+            for(int y = 0; y < CHUNK_SIZE && is_chunk_empty; y++)
+                for(int z = 0; z < CHUNK_SIZE && is_chunk_empty; z++)
+                    is_chunk_empty = (is_chunk_empty && blocks[x][y][z] == 0);
+
+        if(is_chunk_empty)
+        {
+            geometry_built = true;
+            return;
+        }
+
+        for(int i = 0; i < 3; i++)
+            for(int x = 0; x <= CHUNK_SIZE; x++)
+            {
+                for(int y = 0; y < CHUNK_SIZE; y++)
+                    for(int z = 0; z < CHUNK_SIZE; z++)
+                        faces[i][x][y][z] = { 0, Direction::UP };
+                empty[i][x] = true;
+            }
+
+        for(int y = 0; y < CHUNK_SIZE; y++)
+            for(int z = 0; z < CHUNK_SIZE; z++)
+            {
+                if(blocks[0][y][z] != 0)
+                {
+                    faces[(int) Render::FaceOrientation::YOZ][0][y][z] = { blocks[0][y][z], Direction::WEST };
+                    empty[(int) Render::FaceOrientation::YOZ][0] = false;
+                }
+                if(blocks[CHUNK_SIZE - 1][y][z] != 0)
+                {
+                    faces[(int) Render::FaceOrientation::YOZ][CHUNK_SIZE][y][z] = { blocks[CHUNK_SIZE - 1][y][z], Direction::EAST };
+                    empty[(int) Render::FaceOrientation::YOZ][CHUNK_SIZE] = false;
+                }
+            }
+
+        for(int x = 1; x < CHUNK_SIZE; x++)
             for(int y = 0; y < CHUNK_SIZE; y++)
                 for(int z = 0; z < CHUNK_SIZE; z++)
                 {
-                    if(blocks[0][y][z] != 0)
+                    if(blocks[x][y][z] == 0 && blocks[x - 1][y][z] != 0)
                     {
-                        facePlace[(int) Render::FaceOrientation::YOZ].emplace_back(0, y, z);
-                        faceToPlace[(int) Render::FaceOrientation::YOZ].emplace_back(BlockBase::GetBlockFace(blocks[0][y][z], Direction::WEST));
+                        faces[(int) Render::FaceOrientation::YOZ][x][y][z] = { blocks[x - 1][y][z], Direction::EAST };
+                        empty[(int) Render::FaceOrientation::YOZ][x] = false;
                     }
-                
-                    if(blocks[CHUNK_SIZE - 1][y][z] != 0)
+                    if(blocks[x][y][z] != 0 && blocks[x - 1][y][z] == 0)
                     {
-                        facePlace[(int) Render::FaceOrientation::YOZ].emplace_back(CHUNK_SIZE, y, z);
-                        faceToPlace[(int) Render::FaceOrientation::YOZ].emplace_back(BlockBase::GetBlockFace(blocks[CHUNK_SIZE - 1][y][z], Direction::EAST));
+                        faces[(int) Render::FaceOrientation::YOZ][x][y][z] = { blocks[x][y][z], Direction::WEST };
+                        empty[(int) Render::FaceOrientation::YOZ][x] = false;
                     }
                 }
 
-            for(int x = 1; x < CHUNK_SIZE; x++)
-                for(int y = 0; y < CHUNK_SIZE; y++)
-                    for(int z = 0; z < CHUNK_SIZE; z++)
-                    {
-                        if(blocks[x][y][z] == 0 && blocks[x - 1][y][z] != 0)
-                        {
-                            facePlace[(int) Render::FaceOrientation::YOZ].emplace_back(x, y, z);
-                            faceToPlace[(int) Render::FaceOrientation::YOZ].emplace_back(BlockBase::GetBlockFace(blocks[x - 1][y][z], Direction::EAST));
-                        }
-                        else if(blocks[x][y][z] != 0 && blocks[x - 1][y][z] == 0)
-                        {
-                            facePlace[(int) Render::FaceOrientation::YOZ].emplace_back(x, y, z);
-                            faceToPlace[(int) Render::FaceOrientation::YOZ].emplace_back(BlockBase::GetBlockFace(blocks[x][y][z], Direction::WEST));
-                        }
-                    }
-            
-            for(int x = 0; x < CHUNK_SIZE; x++)
+        for(int x = 0; x < CHUNK_SIZE; x++)
+            for(int z = 0; z < CHUNK_SIZE; z++)
+            {
+                if(blocks[x][0][z] != 0)
+                {
+                    faces[(int) Render::FaceOrientation::ZOX][0][x][z] = { blocks[x][0][z], Direction::DOWN };
+                    empty[(int) Render::FaceOrientation::ZOX][0] = false;
+                }
+                if(blocks[x][CHUNK_SIZE - 1][z] != 0)
+                {
+                    faces[(int) Render::FaceOrientation::ZOX][CHUNK_SIZE][x][z] = { blocks[x][CHUNK_SIZE - 1][z], Direction::UP };
+                    empty[(int) Render::FaceOrientation::ZOX][CHUNK_SIZE] = false;
+                }
+            }
+
+        for(int x = 0; x < CHUNK_SIZE; x++)
+            for(int y = 1; y < CHUNK_SIZE; y++)
                 for(int z = 0; z < CHUNK_SIZE; z++)
                 {
-                    if(blocks[x][0][z] != 0)
+                    if(blocks[x][y][z] == 0 && blocks[x][y - 1][z] != 0)
                     {
-                        facePlace[(int) Render::FaceOrientation::ZOX].emplace_back(x, 0, z);
-                        faceToPlace[(int) Render::FaceOrientation::ZOX].emplace_back(BlockBase::GetBlockFace(blocks[x][0][z], Direction::DOWN));
+                        faces[(int) Render::FaceOrientation::ZOX][y][x][z] = { blocks[x][y - 1][z], Direction::UP };
+                        empty[(int) Render::FaceOrientation::ZOX][y] = false;
                     }
-                
-                    if(blocks[x][CHUNK_SIZE - 1][z] != 0)
+                    if(blocks[x][y][z] != 0 && blocks[x][y - 1][z] == 0)
                     {
-                        facePlace[(int) Render::FaceOrientation::ZOX].emplace_back(x, CHUNK_SIZE, z);
-                        faceToPlace[(int) Render::FaceOrientation::ZOX].emplace_back(BlockBase::GetBlockFace(blocks[x][CHUNK_SIZE - 1][z], Direction::UP));
-                    }
-                }
-            
-            for(int x = 0; x < CHUNK_SIZE; x++)
-                for(int y = 1; y < CHUNK_SIZE; y++)
-                    for(int z = 0; z < CHUNK_SIZE; z++)
-                    {
-                        if(blocks[x][y][z] == 0 && blocks[x][y - 1][z] != 0)
-                        {
-                            facePlace[(int) Render::FaceOrientation::ZOX].emplace_back(x, y, z);
-                            faceToPlace[(int) Render::FaceOrientation::ZOX].emplace_back(BlockBase::GetBlockFace(blocks[x][y - 1][z], Direction::UP));
-                        }
-                        else if(blocks[x][y][z] != 0 && blocks[x][y - 1][z] == 0)
-                        {
-                            facePlace[(int) Render::FaceOrientation::ZOX].emplace_back(x, y, z);
-                            faceToPlace[(int) Render::FaceOrientation::ZOX].emplace_back(BlockBase::GetBlockFace(blocks[x][y][z], Direction::DOWN));
-                        }
-                    }
-
-            for(int x = 0; x < CHUNK_SIZE; x++)
-                for(int y = 0; y < CHUNK_SIZE; y++)
-                {
-                    if(blocks[x][y][0] != 0)
-                    {
-                        facePlace[(int) Render::FaceOrientation::XOY].emplace_back(x, y, 0);
-                        faceToPlace[(int) Render::FaceOrientation::XOY].emplace_back(BlockBase::GetBlockFace(blocks[x][y][0], Direction::SOUTH));
-                    }
-
-                    if(blocks[x][y][CHUNK_SIZE - 1] != 0)
-                    {
-                        facePlace[(int) Render::FaceOrientation::XOY].emplace_back(x, y, CHUNK_SIZE);
-                        faceToPlace[(int) Render::FaceOrientation::XOY].emplace_back(BlockBase::GetBlockFace(blocks[x][y][CHUNK_SIZE - 1], Direction::NORTH));
+                        faces[(int) Render::FaceOrientation::ZOX][y][x][z] = { blocks[x][y][z], Direction::DOWN };
+                        empty[(int) Render::FaceOrientation::ZOX][y] = false;
                     }
                 }
 
-            for(int x = 0; x < CHUNK_SIZE; x++)
-                for(int y = 0; y < CHUNK_SIZE; y++)
-                    for(int z = 1; z < CHUNK_SIZE; z++)
-                    {
-                        if(blocks[x][y][z] == 0 && blocks[x][y][z - 1] != 0)
-                        {
-                            facePlace[(int) Render::FaceOrientation::XOY].emplace_back(x, y, z);
-                            faceToPlace[(int) Render::FaceOrientation::XOY].emplace_back(BlockBase::GetBlockFace(blocks[x][y][z - 1], Direction::NORTH));
-                        }
-                        else if(blocks[x][y][z] != 0 && blocks[x][y][z - 1] == 0)
-                        {
-                            facePlace[(int) Render::FaceOrientation::XOY].emplace_back(x, y, z);
-                            faceToPlace[(int) Render::FaceOrientation::XOY].emplace_back(BlockBase::GetBlockFace(blocks[x][y][z], Direction::SOUTH));
-                        }
-                    }
-
-            for(int i = 0; i < 3; i++)
+        for(int x = 0; x < CHUNK_SIZE; x++)
+            for(int y = 0; y < CHUNK_SIZE; y++)
             {
-                mesh.ClearFaces((Render::FaceOrientation) i);
-                
-                if(facePlace[i].size())
+                if(blocks[x][y][0] != 0)
                 {
-                    TRACE(Chunk, "[{}:BuildGeometry] (i:{}) (facePlace[i].size():{})", (unsigned long long) this, i, facePlace[i].size());
-
-                    mesh.PlaceManyFaces(facePlace[i].size(), facePlace[i].data(), (Render::FaceOrientation) i, faceToPlace[i].data());
-                    facePlace[i].clear(); faceToPlace[i].clear();
+                    faces[(int) Render::FaceOrientation::XOY][0][x][y] = { blocks[x][y][0], Direction::SOUTH };
+                    empty[(int) Render::FaceOrientation::XOY][0] = false;
+                }
+                if(blocks[x][y][CHUNK_SIZE - 1] != 0)
+                {
+                    faces[(int) Render::FaceOrientation::XOY][CHUNK_SIZE][x][y] = { blocks[x][y][CHUNK_SIZE - 1], Direction::NORTH };
+                    empty[(int) Render::FaceOrientation::XOY][CHUNK_SIZE] = false;
                 }
             }
 
-            geometry_built = true;
-
-            TRACE(Chunk, "[{}:BuildGeometry] return", (unsigned long long) this);
-            //lazy_build = false;
-            //return;
-        //}
-
-    /*
-        while(!places.empty())
-        {
-            glm::ivec3 position = places.front(); places.pop();
-            BlockID block = blocks[position.x][position.y][position.z];
-
-            if(block == 0)
-            {
-                if(position.x != 0 && IsBlockNotReplaced({ position.x - 1, position.y, position.z }) && blocks[position.x - 1][position.y][position.z] != 0)
+        for(int x = 0; x < CHUNK_SIZE; x++)
+            for(int y = 0; y < CHUNK_SIZE; y++)
+                for(int z = 1; z < CHUNK_SIZE; z++)
                 {
-                    facePlace[(int) Render::FaceOrientation::YOZ].emplace_back(position);
-                    faceToPlace[(int) Render::FaceOrientation::YOZ].emplace_back(BlockBase::GetBlockFace(blocks[position.x - 1][position.y][position.z], Direction::EAST));
+                    if(blocks[x][y][z] == 0 && blocks[x][y][z - 1] != 0)
+                    {
+                        faces[(int) Render::FaceOrientation::XOY][z][x][y] = { blocks[x][y][z - 1], Direction::NORTH };
+                        empty[(int) Render::FaceOrientation::XOY][z] = false;
+                    }
+                    if(blocks[x][y][z] != 0 && blocks[x][y][z - 1] == 0)
+                    {
+                        faces[(int) Render::FaceOrientation::XOY][z][x][y] = { blocks[x][y][z], Direction::SOUTH };
+                        empty[(int) Render::FaceOrientation::XOY][z] = false;
+                    }
                 }
 
-                if(position.x != CHUNK_SIZE - 1 && IsBlockNotReplaced({ position.x + 1, position.y, position.z }) && blocks[position.x + 1][position.y][position.z] != 0)
+        std::vector<Render::FaceMesh> face_meshes[3];
+
+        /*
+        face_count = 0;
+
+        for(int x = 0; x <= CHUNK_SIZE; x++)
+            for(int y = 0; y < CHUNK_SIZE; y++)
+                for(int z = 0; z < CHUNK_SIZE; z++)
                 {
-                    facePlace[(int) Render::FaceOrientation::YOZ].emplace_back(position.x + 1, position.y, position.z);
-                    faceToPlace[(int) Render::FaceOrientation::YOZ].emplace_back(BlockBase::GetBlockFace(blocks[position.x + 1][position.y][position.z], Direction::WEST));
+                    int i = (int) Render::FaceOrientation::YOZ;
+                    if(faces[i][x][y][z].block != 0)
+                        face_meshes[i].emplace_back(GenerateFaceMesh({ x, y, z }, Render::FaceOrientation::YOZ, faces[i][x][y][z]));
                 }
 
-                if(position.y != 0 && IsBlockNotReplaced({ position.x, position.y - 1, position.z }) && blocks[position.x][position.y - 1][position.z] != 0)
+        for(int x = 0; x < CHUNK_SIZE; x++)
+            for(int y = 0; y <= CHUNK_SIZE; y++)
+                for(int z = 0; z < CHUNK_SIZE; z++)
                 {
-                    facePlace[(int) Render::FaceOrientation::ZOX].emplace_back(position);
-                    faceToPlace[(int) Render::FaceOrientation::ZOX].emplace_back(BlockBase::GetBlockFace(blocks[position.x][position.y - 1][position.z], Direction::UP));
+                    int i = (int) Render::FaceOrientation::ZOX;
+                    if(faces[i][y][x][z].block != 0)
+                        face_meshes[i].emplace_back(GenerateFaceMesh({ x, y, z }, Render::FaceOrientation::ZOX, faces[i][y][x][z]));
                 }
 
-                if(position.y != CHUNK_SIZE - 1 && IsBlockNotReplaced({ position.x, position.y + 1, position.z }) && blocks[position.x][position.y + 1][position.z] != 0)
+        for(int x = 0; x < CHUNK_SIZE; x++)
+            for(int y = 0; y < CHUNK_SIZE; y++)
+                for(int z = 0; z <= CHUNK_SIZE; z++)
                 {
-                    facePlace[(int) Render::FaceOrientation::ZOX].emplace_back(position.x, position.y + 1, position.z);
-                    faceToPlace[(int) Render::FaceOrientation::ZOX].emplace_back(BlockBase::GetBlockFace(blocks[position.x][position.y + 1][position.z], Direction::DOWN));
+                    int i = (int) Render::FaceOrientation::XOY;
+                    if(faces[i][z][x][y].block != 0)
+                        face_meshes[i].emplace_back(GenerateFaceMesh({ x, y, z }, Render::FaceOrientation::XOY, faces[i][z][x][y]));
                 }
 
-                if(position.z != 0 && IsBlockNotReplaced({ position.x, position.y, position.z - 1 }) && blocks[position.x][position.y][position.z - 1] != 0)
-                {
-                    facePlace[(int) Render::FaceOrientation::XOY].emplace_back(position);
-                    faceToPlace[(int) Render::FaceOrientation::XOY].emplace_back(BlockBase::GetBlockFace(blocks[position.x][position.y][position.z - 1], Direction::NORTH));
-                }
+        INFO(LogTemp, "Generated {} faces for a chunk", face_count);
+        */
 
-                if(position.z != CHUNK_SIZE - 1 && IsBlockNotReplaced({ position.x, position.y, position.z + 1 }) && blocks[position.x][position.y][position.z + 1] != 0)
-                {
-                    facePlace[(int) Render::FaceOrientation::XOY].emplace_back(position.x, position.y, position.z + 1);
-                    faceToPlace[(int) Render::FaceOrientation::XOY].emplace_back(BlockBase::GetBlockFace(blocks[position.x][position.y][position.z + 1], Direction::SOUTH));
-                }
-            }
-            else
-            {
-                if(position.x == 0 || (IsBlockNotReplaced({ position.x - 1, position.y, position.z }) && blocks[position.x - 1][position.y][position.z] == 0))
-                {
-                    facePlace[(int) Render::FaceOrientation::YOZ].emplace_back(position);
-                    faceToPlace[(int) Render::FaceOrientation::YOZ].emplace_back(BlockBase::GetBlockFace(block, Direction::WEST));
-                }
 
-                if(position.x == CHUNK_SIZE - 1 || (IsBlockNotReplaced({ position.x + 1, position.y, position.z }) && blocks[position.x + 1][position.y][position.z] == 0))
-                {
-                    facePlace[(int) Render::FaceOrientation::YOZ].emplace_back(position.x + 1, position.y, position.z);
-                    faceToPlace[(int) Render::FaceOrientation::YOZ].emplace_back(BlockBase::GetBlockFace(block, Direction::EAST));
-                }
-
-                if(position.y == 0 || (IsBlockNotReplaced({ position.x, position.y - 1, position.z }) && blocks[position.x][position.y - 1][position.z] == 0))
-                {
-                    facePlace[(int) Render::FaceOrientation::ZOX].emplace_back(position);
-                    faceToPlace[(int) Render::FaceOrientation::ZOX].emplace_back(BlockBase::GetBlockFace(block, Direction::DOWN));
-                }
-
-                if(position.y == CHUNK_SIZE - 1 || (IsBlockNotReplaced({ position.x, position.y + 1, position.z }) && blocks[position.x][position.y + 1][position.z] == 0))
-                {
-                    facePlace[(int) Render::FaceOrientation::ZOX].emplace_back(position.x, position.y + 1, position.z);
-                    faceToPlace[(int) Render::FaceOrientation::ZOX].emplace_back(BlockBase::GetBlockFace(block, Direction::UP));
-                }
-
-                if(position.z == 0 || (IsBlockNotReplaced({ position.x, position.y, position.z - 1 }) && blocks[position.x][position.y][position.z - 1] == 0))
-                {
-                    facePlace[(int) Render::FaceOrientation::XOY].emplace_back(position);
-                    faceToPlace[(int) Render::FaceOrientation::XOY].emplace_back(BlockBase::GetBlockFace(block, Direction::SOUTH));
-                }
-
-                if(position.z == CHUNK_SIZE - 1 || (IsBlockNotReplaced({ position.x, position.y, position.z + 1}) && blocks[position.x][position.y][position.z + 1] == 0))
-                {
-                    facePlace[(int) Render::FaceOrientation::XOY].emplace_back(position.x, position.y, position.z + 1);
-                    faceToPlace[(int) Render::FaceOrientation::XOY].emplace_back(BlockBase::GetBlockFace(block, Direction::NORTH));
-                }
-            }
-
-            flags[position.x][position.y][position.z] &= (~BLOCKFLAG_REPLACED);
-        }
-
-        for(unsigned int i = 0; i < 3; i++)
-        {
-            if(faceRemove[i].size())
-            {
-                mesh.RemoveManyFaces(faceRemove[i].size(), faceRemove[i].data(), (Render::FaceOrientation) i);
-                faceRemove[i].clear();
-            }
-
-            if(facePlace[i].size())
-            {
-                mesh.PlaceManyFaces(facePlace[i].size(), facePlace[i].data(), (Render::FaceOrientation) i, faceToPlace[i].data());
-                facePlace[i].clear(); faceToPlace[i].clear();
-            }
-        }
+        for(int i = 0; i < 3; i++)
+            for(int x = 0; x <= CHUNK_SIZE; x++)
+                if(!empty[i][x])
+                    LazyMesh(x, faces[i][x], (Render::FaceOrientation) i, face_meshes[i]);
 
         geometry_built = true;
-    */
+
+        if(face_meshes[0].size() + face_meshes[1].size() + face_meshes[2].size() == 0)
+            return;
+        
+        {
+            PROFILE_SCOPE(RenderSync);
+
+            Render::RenderThread& render_thread = Application::Get()->GetRenderThread();
+            if(mesh_handle == -1)
+            {
+                mesh_handle = render_thread.NewChunkMesh();
+                render_thread.SetChunkTransform(mesh_handle, transform);
+                render_thread.AddChunkToDrawCall(mesh_handle);
+            }
+
+            for(int i = 0; i < 3; i++)
+                render_thread.SetChunkFaces(mesh_handle, face_meshes[i], (Render::FaceOrientation) i);
+        }
     }
 
-    World::World()
+    void Chunk::LazyMesh(int layer, const Game::Face slice[CHUNK_SIZE][CHUNK_SIZE], Render::FaceOrientation orientation, std::vector<Render::FaceMesh>& out)
+    {
+        PROFILE_FUNCTION();
+
+        int cx = 0, cy = 0;
+        for(int x = 0; x < CHUNK_SIZE; x++)
+        {
+            int lastx = 0, lasty = 0;
+            for(int y = 1; y < CHUNK_SIZE; y++)
+            {
+                if(slice[x][lasty] != slice[x][y])
+                {
+                    if(slice[x][lasty].block != 0) cx++;
+                    lasty = y;
+                }
+
+                if(slice[lastx][x] != slice[y][x])
+                {
+                    if(slice[lastx][x].block != 0) cy++;
+                    lastx = y;
+                }
+            }
+            if(slice[x][lasty].block != 0)
+                cx++;
+            if(slice[lastx][x].block != 0)
+                cy++;
+        }
+
+        if(cx <= cy)
+        {
+            PROFILE_SCOPE(LazyMeshGenerate);
+
+            out.reserve(out.size() + cx);
+            for(int x = 0; x < CHUNK_SIZE; x++)
+            {
+                int last = 0;
+                for(int y = 1; y < CHUNK_SIZE; y++)
+                {
+                    if(slice[x][last] != slice[x][y])
+                    {
+                        if(slice[x][last].block != 0)
+                            out.emplace_back(GenerateLongFace(layer, slice[x][last], orientation, x, last, x + 1, y));
+                        last = y;
+                    }
+                }
+                if(slice[x][last].block != 0)
+                    out.emplace_back(GenerateLongFace(layer, slice[x][last], orientation, x, last, x + 1, CHUNK_SIZE));
+            }
+        }
+        else
+        {
+            PROFILE_SCOPE(LazyMeshGenerate);
+
+            out.reserve(out.size() + cy);
+            for(int y = 0; y < CHUNK_SIZE; y++)
+            {
+                int last = 0;
+                for(int x = 1; x < CHUNK_SIZE; x++)
+                {
+                    if(slice[last][y] != slice[x][y])
+                    {
+                        if(slice[last][y].block != 0)
+                            out.emplace_back(GenerateLongFace(layer, slice[last][y], orientation, last, y, x, y + 1));
+                        last = x;
+                    }
+                }
+                if(slice[last][y].block != 0)
+                    out.emplace_back(GenerateLongFace(layer, slice[last][y], orientation, last, y, CHUNK_SIZE, y + 1));
+            }
+        }
+    }
+
+    Render::FaceMesh Chunk::GenerateLongFace(int layer, const Game::Face& face, Render::FaceOrientation orientation, int x1, int y1, int x2, int y2)
+    {
+        PROFILE_FUNCTION();
+
+        Render::FaceMesh mesh;
+
+        Render::RenderThread& render_thread = Application::Get()->GetRenderThread();
+        int texture = render_thread.GetBlockTextureID(face);
+
+        switch(orientation)
+        {
+        case Render::FaceOrientation::XOY:
+            {
+                mesh.v[0].encoded = encode(x1, y1, layer, texture);
+                mesh.v[1].encoded = encode(x2, y1, layer, texture);
+                mesh.v[2].encoded = encode(x2, y2, layer, texture);
+                mesh.v[3].encoded = encode(x1, y2, layer, texture);
+                break;
+            }
+        case Render::FaceOrientation::YOZ:
+            {
+                mesh.v[0].encoded = encode(layer, x1, y1, texture);
+                mesh.v[1].encoded = encode(layer, x2, y1, texture);
+                mesh.v[2].encoded = encode(layer, x2, y2, texture);
+                mesh.v[3].encoded = encode(layer, x1, y2, texture);
+                break;
+            }
+        case Render::FaceOrientation::ZOX:
+            {
+                mesh.v[0].encoded = encode(x1, layer, y1, texture);
+                mesh.v[1].encoded = encode(x1, layer, y2, texture);
+                mesh.v[2].encoded = encode(x2, layer, y2, texture);
+                mesh.v[3].encoded = encode(x2, layer, y1, texture);
+                break;
+            }
+        }
+
+        switch(face.direction)
+        {
+        case Direction::SOUTH:
+        case Direction::WEST:
+        case Direction::DOWN:
+            {
+                std::swap(mesh.v[1], mesh.v[3]);
+                mesh.v[0].encoded |= (1 << 10);
+                mesh.v[1].encoded |= (1 << 10);
+                mesh.v[2].encoded |= (1 << 10);
+                mesh.v[3].encoded |= (1 << 10);
+                break;
+            }
+        case Direction::NORTH:
+        case Direction::EAST:
+        case Direction::UP:
+            break;
+        }
+
+        return mesh;
+    }
+
+    World::World(std::unique_ptr<ChunkGenerator>& chunk_generator)
     {
         TRACE(World, "[{}:constructor] <>", (unsigned long long) this);
+
+        this->chunk_generator = std::move(chunk_generator);
+    }
+
+    World::World(World&& other) :
+        chunks(std::move(other.chunks)), chunk_index(std::move(other.chunk_index)), chunk_generator(std::move(other.chunk_generator))
+    {
+        TRACE(World, "[{}:move_constructor] (#other:{}) <>", (unsigned long long) this, (unsigned long long) &other);
     }
 
     World::~World()
@@ -344,121 +479,87 @@ namespace Game
         TRACE(World, "[{}:destructor] <>", (unsigned long long) this);
     }
 
-    World::World(World&& other) :
-        chunks(std::move(other.chunks)), chunkPositions(std::move(other.chunkPositions))
-    {
-        TRACE(World, "[{}:move_constructor] (#other:{}) <>", (unsigned long long) this, (unsigned long long) &other);
-    }
-
     World& World::operator=(World&& other)
     {
         TRACE(World, "[{}:move_assignment] (#other:{}) <>", (unsigned long long) this, (unsigned long long) &other);
 
         chunks = std::move(other.chunks);
-        chunkPositions = std::move(other.chunkPositions);
+        chunk_index = std::move(other.chunk_index);
+        chunk_generator = std::move(other.chunk_generator);
+
         return *this;
-    }
-
-    void World::__Deprecated_PlaceBlock(const glm::ivec3& position, BlockID block)
-    {
-        glm::ivec3 chunk = GetChunkCoordinates(position);
-        glm::ivec3 blockPosition = position - chunk * CHUNK_SIZE;
-
-        chunks[chunkPositions[chunk]].PlaceBlock(blockPosition, block);
-    }
-
-    void World::__Deprecated_RemoveBlock(const glm::ivec3& position)
-    {
-        glm::ivec3 chunk = GetChunkCoordinates(position);
-        glm::ivec3 blockPosition = position - chunk * CHUNK_SIZE;
-
-        chunks[chunkPositions[chunk]].RemoveBlock(blockPosition);
     }
 
     void World::PlaceBlock(const glm::ivec3& position, BlockID block)
     {
-        std::lock_guard<std::mutex> guard(chunksMutex);
+        glm::ivec3 chunk_coordinates = GlobalCoordinatesToChunkCoordinates(position);
+        glm::ivec3 block_coordinates = GlobalCoordinatesToLocalCoordinates(position);
 
-        glm::ivec3 chunk = GetChunkCoordinates(position);
-        glm::ivec3 blockPosition = position - chunk * CHUNK_SIZE;
-
-        chunks[chunkPositions[chunk]].PlaceBlock(blockPosition, block);
+        chunks.at(chunk_index.at(chunk_coordinates)).PlaceBlock(block_coordinates, block);
     }
 
     void World::RemoveBlock(const glm::ivec3& position)
     {
-        std::lock_guard<std::mutex> guard(chunksMutex);
+        glm::ivec3 chunk_coordinates = GlobalCoordinatesToChunkCoordinates(position);
+        glm::ivec3 block_coordinates = GlobalCoordinatesToLocalCoordinates(position);
 
-        glm::ivec3 chunk = GetChunkCoordinates(position);
-        glm::ivec3 blockPosition = position - chunk * CHUNK_SIZE;
-
-        chunks[chunkPositions[chunk]].RemoveBlock(blockPosition);
+        chunks.at(chunk_index.at(chunk_coordinates)).RemoveBlock(block_coordinates);
     }
 
-    Chunk& World::LoadChunk(const glm::ivec3& chunkCoords)
+    Chunk& World::LoadChunk(const glm::ivec3& chunk_coordinates)
     {
-        std::lock_guard<std::mutex> guard(chunksMutex);
+        TRACE(World, "[{}:LoadChunk] (#chunkCoords:{})", (unsigned long long) this, chunk_coordinates);
 
-        TRACE(World, "[{}:LoadChunk] (#chunkCoords:{})", (unsigned long long) this, chunkCoords);
-
-        unsigned int chunkPosition = chunks.size();
-        chunkPositions[chunkCoords] = chunkPosition;
-        TRACE(World, "[{}:LoadChunk] (chunkPosition:{})", (unsigned long long) this, chunkPosition);
+        unsigned int chunk_idx = chunks.size();
+        chunk_index[chunk_coordinates] = chunk_idx;
+        TRACE(World, "[{}:LoadChunk] (chunkPosition:{})", (unsigned long long) this, chunk_idx);
 
         Chunk& chunk = chunks.emplace_back();
-        chunk.SetCoordinates(chunkCoords);
-        chunk.GetTransform().Position() = chunkCoords * CHUNK_SIZE;
+        chunk.SetCoordinates(chunk_coordinates);
+        chunk.GetTransform().Position() = chunk_coordinates * CHUNK_SIZE;
 
         TRACE(World, "[{}:LoadChunk] return", (unsigned long long) this);
         return chunk;
     }
 
-    void World::LoadChunk(const glm::ivec3& chunkCoords, Chunk&& chunk)
+    void World::UnloadChunk(const glm::ivec3& chunk_coordinates)
     {
-        std::lock_guard<std::mutex> guard(chunksMutex);
-
-        unsigned int chunkPosition = chunks.size();
-        chunkPositions[chunkCoords] = chunkPosition;
-
-        Chunk& finalChunk = chunks.emplace_back(std::move(chunk));
-        finalChunk.SetCoordinates(chunkCoords);
-        finalChunk.GetTransform().Position() = chunkCoords * CHUNK_SIZE;
-    }
-
-    void World::UnloadChunk(const glm::ivec3& chunkCoords)
-    {
-        std::lock_guard<std::mutex> guard(chunksMutex);
-
-        unsigned int position = chunkPositions[chunkCoords];
-        chunkPositions.erase(chunkCoords);
+        unsigned int chunk_idx = chunk_index.at(chunk_coordinates);
+        chunk_index.erase(chunk_coordinates);
         
-        if(position != chunks.size() - 1)
+        if(chunk_idx != chunks.size() - 1)
         {
             glm::ivec3 other = chunks.back().GetCoordinates();
-            chunks[position] = std::move(chunks.back());
-            chunkPositions[other] = position;
+            chunks.at(chunk_idx) = std::move(chunks.back());
+            chunk_index.at(other) = chunk_idx;
         }
 
         chunks.pop_back();
     }
 
-    Chunk& World::GetChunk(const glm::ivec3& chunkCoords)
+    Chunk& World::GetChunk(const glm::ivec3& chunk_coordinates)
     {
-        return chunks[chunkPositions[chunkCoords]];
+        return chunks.at(chunk_index.at(chunk_coordinates));
     }
 
-    const Chunk& World::GetChunk(const glm::ivec3& chunkCoords) const
+    const Chunk& World::GetChunk(const glm::ivec3& chunk_coordinates) const
     {
-        return chunks[chunkPositions.at(chunkCoords)];
+        return chunks.at(chunk_index.at(chunk_coordinates));
     }
 
-    glm::ivec3 World::GetChunkCoordinates(const glm::ivec3& coordinates) noexcept
+    glm::ivec3 World::GlobalCoordinatesToChunkCoordinates(const glm::ivec3& coordinates) noexcept
     {
         int x = coordinates.x / CHUNK_SIZE, y = coordinates.y / CHUNK_SIZE, z = coordinates.z / CHUNK_SIZE;
         if(coordinates.x < 0 && coordinates.x % CHUNK_SIZE != 0) x--;
         if(coordinates.y < 0 && coordinates.y % CHUNK_SIZE != 0) y--;
         if(coordinates.z < 0 && coordinates.z % CHUNK_SIZE != 0) z--;
         return { x, y, z };
+    }
+
+    glm::ivec3 World::GlobalCoordinatesToLocalCoordinates(const glm::ivec3& coordinates) noexcept
+    {
+        glm::ivec3 chunk_coordinates = GlobalCoordinatesToChunkCoordinates(coordinates);
+        return coordinates - chunk_coordinates * CHUNK_SIZE;
     }
 
     static void FillLayer(Game::Chunk& chunk, unsigned int layer, BlockID block)
@@ -477,173 +578,187 @@ namespace Game
             FillLayer(chunk, 2, VanillaBlocks::DIRT_BLOCK);
             FillLayer(chunk, 3, VanillaBlocks::DIRT_BLOCK);
             FillLayer(chunk, 4, VanillaBlocks::GRASS_BLOCK);
+
+            if(coords.x == 0)
+            {
+                FillLayer(chunk, 4, VanillaBlocks::BEDROCK_BLOCK);
+            }
         }
     }
 
-    WorldLoader::WorldLoader(const std::shared_ptr<World>& _world, std::unique_ptr<ChunkGenerator>& _generator) :
-        world(_world), generator(std::move(_generator)), previous(1000000000, 1000000000, 1000000000)
+    WorldLoadThread::WorldLoadThread()
     {
+        exit = false;
+        world = nullptr;
+        thread = std::move(std::thread([&]() { Run(); }));
     }
 
-    WorldLoader::~WorldLoader()
+    WorldLoadThread::~WorldLoadThread()
     {
+        exit = true;
+        thread.join();
     }
 
-    bool WorldLoader::LoadChunks(const glm::ivec3& center, unsigned int radius)
+    void WorldLoadThread::AddPlayer(const std::shared_ptr<Player>& player)
     {
-        static const int d[] = { 0, 0, 1, 0, 0, -1, 0, 0 };
+        std::lock_guard<std::mutex> guard(players_mutex);
+        players.emplace_back(player);
+    }
 
-        if(previous == center)
-            return true;
+    void WorldLoadThread::RemovePlayer(const std::shared_ptr<Player>& player)
+    {
+        std::lock_guard<std::mutex> guard(players_mutex);
+        
+        int i = 0;
+        while(i < players.size() && players[i] != player)
+            i++;
 
-        std::shared_ptr<World> world = this->world.lock();
-        if(!world)
-            return false;
+        if(i == players.size())
+            return;
 
-        std::queue<glm::ivec3> to_load;
+        if(i != players.size() - 1)
+            players[i] = players.back();
+        players.pop_back();
+    }
 
-        if(std::abs(previous.x - center.x) + std::abs(previous.y - center.y) + std::abs(previous.z - center.z) == 1)
+    void WorldLoadThread::SetWorld(const std::shared_ptr<World>& world)
+    {
+        std::lock_guard<std::mutex> guard(world_mutex);
+        this->world = world;
+    }
+
+    void WorldLoadThread::Run()
+    {
+        float last_time = glfwGetTime();
+        int count = 0;
+        while(!exit)
         {
-            INFO(LogTemp, "Lazy load");
+            float world_load_start_time = glfwGetTime();
 
-            std::queue<glm::ivec3> to_unload;
-
-            for(unsigned int i = 0; i < border.size(); )
+            if(world != nullptr)
             {
-                glm::ivec3 cur = border[i];
-                if(glm::distance(glm::vec3(cur), glm::vec3(center)) > radius)
+                std::vector<LoadTarget> load_targets;
+
                 {
-                    if(world->IsChunkLoaded(cur))
-                        to_unload.emplace(cur);
+                    std::lock_guard<std::mutex> guard(players_mutex);
+                    for(int i = 0; i < players.size(); i++)
+                        load_targets.emplace_back(World::GlobalCoordinatesToChunkCoordinates(players[i]->GetTransform().Position()), players[i]->GetRenderDistance());
+                }
 
-                    on_border.erase(cur);
-                    if(i != border.size() - 1)
-                        border[i] = border.back();
-                    border.pop_back();
+                std::unordered_set<glm::ivec3> required_chunks;
+                for(int i = 0; i < load_targets.size(); i++)
+                    FindChunksInSphere(load_targets[i].center, load_targets[i].radius, required_chunks);
+
+                std::vector<glm::ivec3> to_load, to_unload;
                 
-                    for(unsigned int k = 0; k < 6; k++)
+                {
+                    std::lock_guard<std::mutex> world_ptr_guard(world_mutex);
+                    
+                    if(world != nullptr)
                     {
-                        glm::ivec3 next = { cur.x + d[k], cur.y + d[k + 1], cur.z + d[k + 2] };
-                        if(!on_border.contains(next) && glm::distance(glm::vec3(next), glm::vec3(center)) <= radius)
-                        {
-                            if(!world->IsChunkLoaded(next))
-                                to_load.emplace(next);
+                        to_load.reserve(required_chunks.size());
+                        to_unload.reserve(required_chunks.size());
 
-                            on_border.emplace(next);
-                            border.emplace_back(next);
+                        for(auto& chunk : world->GetChunks())
+                        {
+                            if(required_chunks.find(chunk.GetCoordinates()) == required_chunks.end())
+                                to_unload.emplace_back(chunk.GetCoordinates());
+                            else required_chunks.erase(chunk.GetCoordinates());
+                        }
+
+                        for(const glm::ivec3& chunk_coords : required_chunks)
+                            to_load.emplace_back(chunk_coords);
+
+                        auto closest_to_target = [&](const glm::ivec3& x, const glm::ivec3& y)
+                        {
+                            return glm::distance2(glm::vec3(x), glm::vec3(load_targets.front().center)) < glm::distance2(glm::vec3(y), glm::vec3(load_targets.front().center));
+                        };
+
+                        std::sort(to_load.begin(), to_load.end(), closest_to_target);
+                        std::sort(to_unload.begin(), to_unload.end(), closest_to_target);
+
+                        int i = 0, j = 0;
+                        while(i < to_load.size() && j < to_unload.size())
+                        {
+                            std::lock_guard<std::mutex> world_guard(world->GetMutex());
+                            
+                            world->UnloadChunk(to_unload[j++]);
+                            Chunk& chunk = world->LoadChunk(to_load[i++]);
+                        
+                            world->GetChunkGenerator()->GenerateChunk(chunk, chunk.GetCoordinates());
+                            chunk.BuildGeometry();
+
+                            if(exit)
+                                break;
+                        }
+
+                        while(i < to_load.size())
+                        {
+                            std::lock_guard<std::mutex> world_guard(world->GetMutex());
+                            
+                            Chunk& chunk = world->LoadChunk(to_load[i++]);
+                            world->GetChunkGenerator()->GenerateChunk(chunk, chunk.GetCoordinates());
+                            chunk.BuildGeometry();
+                            
+                            if(exit)
+                                break;
+                        }
+
+                        while(j < to_unload.size())
+                        {
+                            std::lock_guard<std::mutex> world_guard(world->GetMutex());
+
+                            world->UnloadChunk(to_unload[j++]);
+
+                            if(exit)
+                                break;
                         }
                     }
                 }
-                else i++;
             }
 
-            for(unsigned int i = 0; i < border.size(); i++)
+            float world_load_end_time = glfwGetTime();
+            float world_load_time = world_load_end_time - world_load_start_time;
+
+            float sleep_time = (world_load_time < 1.0f ? 1.0f - world_load_time : 0.0f);
+
+            if(sleep_time != 0.0f)
+                std::this_thread::sleep_for(std::chrono::microseconds((long long) (sleep_time * 1'000'000.0f)));
+
+            count++;
+
+            float time = glfwGetTime();
+            if(time - last_time >= 5.0f)
             {
-                glm::ivec3 cur = border[i];
-
-                for(unsigned int k = 0; k < 6; k++)
-                {
-                    glm::ivec3 next = { cur.x + d[k], cur.y + d[k + 1], cur.z + d[k + 2] };
-                    if(!on_border.contains(next) && glm::distance(glm::vec3(next), glm::vec3(center)) <= radius)
-                    {
-                        if(!world->IsChunkLoaded(next))
-                            to_load.emplace(next);
-
-                        on_border.emplace(next);
-                        border.emplace_back(next);
-                    }
-                }
-            }
-
-            for(unsigned int i = 0; i < border.size(); )
-            {
-                glm::ivec3 cur = border[i];
-                unsigned int count = 0;
-                for(unsigned int k = 0; k < 6; k++)
-                {
-                    glm::ivec3 next = { cur.x + d[k], cur.y + d[k + 1], cur.z + d[k + 2] };
-                    if(!on_border.contains(next))
-                        count++;
-                }
-
-                if(count == 0)
-                {
-                    on_border.erase(cur);
-                    if(i != border.size() - 1)
-                        border[i] = border.back();
-                    border.pop_back();
-                }
-                else i++;
-            }
-
-            while(!to_unload.empty())
-            {
-                glm::ivec3 cur = to_unload.front(); to_unload.pop();
-                world->UnloadChunk(cur);
+                WARN(LogTemp, "World load avg: {} fps", count / (time - last_time));
+                last_time = time;
+                count = 0;
             }
         }
-        else
+    }
+
+    void WorldLoadThread::FindChunksInSphere(const glm::ivec3& center, float radius, std::unordered_set<glm::ivec3>& out)
+    {
+        static const int d[] = { 0, 0, -1, 0, 0, 1, 0, 0 };
+
+        std::queue<glm::ivec3> queue;
+        queue.emplace(center);
+        out.emplace(center);
+
+        while(!queue.empty())
         {
-            std::unordered_set<glm::ivec3> to_unload;
-            for(const Chunk& chunk : world->GetChunks())
-                to_unload.emplace(chunk.GetCoordinates());
+            glm::ivec3 cur = queue.front(); queue.pop();
 
-            std::unordered_set<glm::ivec3> visited;
-
-            on_border.clear();
-            border.clear();
-
-            visited.emplace(center);
-            border.emplace_back(center);
-
-            for(unsigned int i = 0; i < border.size(); )
+            for(int k = 0; k < 6; k++)
             {
-                glm::ivec3 cur = border[i];
-                unsigned int count = 0;
-                for(unsigned int k = 0; k < 6; k++)
+                glm::ivec3 next = { cur.x + d[k], cur.y + d[k + 1], cur.z + d[k + 2] };
+                if(out.find(next) == out.end() && glm::distance2(glm::vec3(center), glm::vec3(next)) <= radius * radius)
                 {
-                    glm::ivec3 next = { cur.x + d[k], cur.y + d[k + 1], cur.z + d[k + 2] };
-                    if(!visited.contains(next) && glm::distance(glm::vec3(next), glm::vec3(center)) <= radius)
-                    {
-                        visited.emplace(next);
-                        border.emplace_back(next);
-                    }
-                    else if(glm::distance(glm::vec3(next), glm::vec3(center)) > radius)
-                        count++;
-                }
-
-                if(!world->IsChunkLoaded(cur))
-                    to_load.emplace(cur);
-                else to_unload.erase(cur);
-
-                if(count == 0)
-                {
-                    if(i != border.size() - 1)
-                        border[i] = border.back();
-                    border.pop_back();
-                }
-                else
-                {
-                    on_border.emplace(cur);
-                    i++;
+                    queue.emplace(next);
+                    out.emplace(next);
                 }
             }
-
-            for(const glm::ivec3& cur : to_unload)
-                world->UnloadChunk(cur);
         }
-
-        while(!to_load.empty())
-        {
-            glm::ivec3 cur = to_load.front(); to_load.pop();
-            
-            Chunk& chunk = world->LoadChunk(cur);
-            generator->GenerateChunk(chunk, cur);
-            chunk.BuildGeometry();
-        }
-
-        previous = center;
-        return true;
     }
 };
 

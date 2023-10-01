@@ -16,7 +16,7 @@ namespace fmt
         template<typename FormatContext>
         auto format(const glm::tvec2<Tp>& input, FormatContext& ctx) -> decltype(ctx.out())
         {
-            return fmt::format_to(ctx.out(), "{{x:{}, y:{}}}", input.x, input.y);
+            return fmt::format_to(ctx.out(), "{{x:{},y:{}}}", input.x, input.y);
         }
     };
 
@@ -31,7 +31,7 @@ namespace fmt
         template<typename FormatContext>
         auto format(const glm::tvec3<Tp>& input, FormatContext& ctx) -> decltype(ctx.out())
         {
-            return fmt::format_to(ctx.out(), "{{x:{}, y:{}, z:{}}}", input.x, input.y, input.z);
+            return fmt::format_to(ctx.out(), "{{x:{},y:{},z:{}}}", input.x, input.y, input.z);
         }
     };
 
@@ -46,7 +46,7 @@ namespace fmt
         template<typename FormatContext>
         auto format(const glm::tvec4<Tp>& input, FormatContext& ctx) -> decltype(ctx.out())
         {
-            return fmt::format_to(ctx.out(), "{{x:{}, y:{}, z:{}, w:{}}}", input.x, input.y, input.z, input.w);
+            return fmt::format_to(ctx.out(), "{{x:{},y:{},z:{},w:{}}}", input.x, input.y, input.z, input.w);
         }
     };
 
@@ -61,7 +61,7 @@ namespace fmt
         template<typename FormatContext>
         auto format(const glm::tmat4x4<Tp>& input, FormatContext& ctx) -> decltype(ctx.out())
         {
-            return fmt::format_to(ctx.out(), "{{v[0]:{}, v[1]:{}, v[2]:{}, v[3]:{}}}", input[0], input[1], input[2], input[3]);
+            return fmt::format_to(ctx.out(), "{{v[0]:{},v[1]:{},v[2]:{},v[3]:{}}}", input[0], input[1], input[2], input[3]);
         }
     };
 };

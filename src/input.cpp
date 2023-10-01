@@ -1,154 +1,186 @@
 #include "input.h"
 
-#include <cstring>
-
 #include "files.h"
 #include "window.h"
 
-DEFINE_LOG_CATEGORY(Input, spdlog::level::trace, LOGFILE("Input.txt"));
+#include "application.h"
+
+DEFINE_LOG_CATEGORY(Input, FILE_LOGGER(trace, LOGFILE("Input.txt")));
 
 namespace Input
 {
-    static bool g_keys_pressed[GLFW_KEY_LAST + 1];
-    static bool g_keys_just_pressed[GLFW_KEY_LAST + 1];
-    static bool g_keys_just_released[GLFW_KEY_LAST + 1];
-    
-    static bool g_buttons_pressed[GLFW_MOUSE_BUTTON_LAST + 1];
-    static bool g_buttons_just_pressed[GLFW_MOUSE_BUTTON_LAST + 1];
-    static bool g_buttons_just_released[GLFW_MOUSE_BUTTON_LAST + 1];
-
-    static glm::vec2 g_cursor_position, g_cursor_movement;
-
-    bool IsKeyPressed(unsigned int key)
+    InputAction GLFWActionToInputAction(int action)
     {
-        return g_keys_pressed[key];
-    }
-
-    bool IsKeyJustPressed(unsigned int key)
-    {
-        return g_keys_just_pressed[key];
-    }
-
-    bool IsKeyReleased(unsigned int key)
-    {
-        return !g_keys_pressed[key];
-    }
-
-    bool IsKeyJustReleased(unsigned int key)
-    {
-        return g_keys_just_released[key];
-    }
-
-    bool IsButtonPressed(unsigned int button)
-    {
-        return g_buttons_pressed[button];
-    }
-
-    bool IsButtonJustPressed(unsigned int button)
-    {
-        return g_buttons_just_pressed[button];
-    }
-
-    bool IsButtonReleased(unsigned int button)
-    {
-        return !g_buttons_pressed[button];
-    }
-
-    bool IsButtonJustReleased(unsigned int button)
-    {
-        return g_buttons_just_released[button];
-    }
-
-    glm::vec2 GetCursorPosition()
-    {
-        return g_cursor_position;
-    }
-
-    glm::vec2 GetCursorMovement()
-    {
-        return g_cursor_movement;
+        switch(action)
+        {
+        case GLFW_PRESS:
+        case GLFW_REPEAT:
+            return InputAction::PRESSED;
+        case GLFW_RELEASE:
+            return InputAction::RELEASED;
+        default:
+            return InputAction::NONE;
+        }
     }
 
     void __key_callback_fn(GLFWwindow* window, int key, int scancode, int action, int mods)
     {
-        switch(action)
-        {
-            case GLFW_PRESS:
-            case GLFW_REPEAT:
-                if(!g_keys_pressed[key])
-                    g_keys_just_pressed[key] = true;
-                g_keys_pressed[key] = true;
-                break;
-            case GLFW_RELEASE:
-                if(g_keys_pressed[key])
-                    g_keys_just_released[key] = true;
-                g_keys_pressed[key] = false;
-                break;
-        }
+        Application::Get()->DispatchEvent<KeyEvent>(key, GLFWActionToInputAction(action));
     }
 
-    void __button_callback_fn(GLFWwindow* window, int button, int action, int mods)
+    void __mouse_button_callback_fn(GLFWwindow* window, int button, int action, int mods)
     {
-        switch(action)
-        {
-            case GLFW_PRESS:
-            case GLFW_REPEAT:
-                if(!g_buttons_pressed[button])
-                    g_buttons_just_pressed[button] = true;
-                g_buttons_pressed[button] = true;
-                break;
-            case GLFW_RELEASE:
-                if(g_buttons_pressed[button])
-                    g_buttons_just_released[button] = true;
-                g_buttons_pressed[button] = false;
-                break;
-        }
+        Application::Get()->DispatchEvent<ButtonEvent>(button, GLFWActionToInputAction(action));
     }
 
-    void Init()
+    void __cursor_pos_callback_fn(GLFWwindow* window, double xpos, double ypos)
     {
-        TRACE(Input, "[Init]");
+        Application::Get()->DispatchEvent<CursorMovedEvent>(glm::vec2 { xpos, ypos });
+    }
 
-        GLFWwindow* window = Window::GetInternalWindow();
+    InputHandler::InputHandler(GLFWwindow* _window) :
+        window(_window)
+    {
         glfwSetKeyCallback(window, __key_callback_fn);
-        glfwSetMouseButtonCallback(window, __button_callback_fn);
+        glfwSetMouseButtonCallback(window, __mouse_button_callback_fn);
+        glfwSetCursorPosCallback(window, __cursor_pos_callback_fn);
 
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
-    
-        TRACE(Input, "[Init] return");
+
+        double xpos, ypos;
+        glfwGetCursorPos(window, &xpos, &ypos);
+        cursor_position = { xpos, ypos };
+
+        std::memset(keys_pressed, 0, sizeof(keys_pressed));
+        std::memset(buttons_pressed, 0, sizeof(buttons_pressed));
     }
 
-    void Destroy()
+    InputHandler::~InputHandler()
     {
-        TRACE(Input, "[Destroy]");
-
-        GLFWwindow* window = Window::GetInternalWindow();
-        glfwSetKeyCallback(window, nullptr);
+        glfwSetCursorPosCallback(window, nullptr);
         glfwSetMouseButtonCallback(window, nullptr);
+        glfwSetKeyCallback(window, nullptr);
+    }
+
+    void InputHandler::Reset()
+    {
+        std::memset(keys_just_pressed, 0, sizeof(keys_just_pressed));
+        std::memset(keys_just_released, 0, sizeof(keys_just_released));
+
+        std::memset(buttons_just_pressed, 0, sizeof(buttons_just_pressed));
+        std::memset(buttons_just_released, 0, sizeof(buttons_just_released));
+    }
+
+    void InputHandler::Update()
+    {
+        double xpos, ypos;
+        glfwGetCursorPos(window, &xpos, &ypos);
+        glm::vec2 new_position = { xpos, ypos };
+
+        cursor_movement = new_position - cursor_position;
+        cursor_position = new_position;
+    }
+
+    void InputHandler::Handle(const KeyEvent& key_event)
+    {
+        switch(key_event.action)
+        {
+        case InputAction::PRESSED:
+            if(!keys_pressed[key_event.key])
+            {
+                keys_just_pressed[key_event.key] = true;
+                keys_pressed[key_event.key] = true;
+            }
+            break;
+        case InputAction::RELEASED:
+            if(keys_pressed[key_event.key])
+            {
+                keys_just_released[key_event.key] = true;
+                keys_pressed[key_event.key] = false;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    void InputHandler::Handle(const ButtonEvent& button_event)
+    {
+        switch(button_event.action)
+        {
+        case InputAction::PRESSED:
+            if(!buttons_pressed[button_event.button])
+            {
+                buttons_just_pressed[button_event.button] = true;
+                buttons_pressed[button_event.button] = true;
+            }
+            break;
+        case InputAction::RELEASED:
+            if(buttons_pressed[button_event.button])
+            {
+                buttons_just_released[button_event.button] = true;
+                buttons_pressed[button_event.button] = false;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+
+    void InputHandler::Handle(const CursorMovedEvent& cursor_moved_event)
+    {
+        //cursor_movement = cursor_moved_event.position - cursor_position;
+        //cursor_position = cursor_moved_event.position;
+    }
     
-        TRACE(Input, "[Destroy] return");
+    bool InputHandler::IsKeyPressed(unsigned int key)
+    {
+        return keys_pressed[key];
     }
 
-    void PreUpdate()
+    bool InputHandler::IsKeyJustPressed(unsigned int key)
     {
-        std::memset(g_keys_just_pressed, 0, sizeof(g_keys_just_pressed));
-        std::memset(g_keys_just_released, 0, sizeof(g_keys_just_released));
-
-        std::memset(g_buttons_just_pressed, 0, sizeof(g_buttons_just_pressed));
-        std::memset(g_buttons_just_released, 0, sizeof(g_buttons_just_released));
+        return keys_just_pressed[key];
     }
 
-    void Update()
+    bool InputHandler::IsKeyReleased(unsigned int key)
     {
-        GLFWwindow* window = Window::GetInternalWindow();
+        return !keys_pressed[key];
+    }
 
-        glm::vec2 old_position = g_cursor_position;
+    bool InputHandler::IsKeyJustReleased(unsigned int key)
+    {
+        return keys_just_released[key];
+    }
 
-        double x, y;
-        glfwGetCursorPos(window, &x, &y);
-        g_cursor_position = { x, y };
+    bool InputHandler::IsButtonPressed(unsigned int button)
+    {
+        return buttons_pressed[button];
+    }
 
-        g_cursor_movement = g_cursor_position - old_position;
+    bool InputHandler::IsButtonJustPressed(unsigned int button)
+    {
+        return buttons_just_pressed[button];
+    }
+
+    bool InputHandler::IsButtonReleased(unsigned int button)
+    {
+        return !buttons_pressed[button];
+    }
+
+    bool InputHandler::IsButtonJustReleased(unsigned int button)
+    {
+        return buttons_just_released[button];
+    }
+
+    glm::vec2 InputHandler::GetCursorPosition()
+    {
+        return cursor_position;
+    }
+
+    glm::vec2 InputHandler::GetCursorMovement()
+    {
+        return cursor_movement;
     }
 };
 
