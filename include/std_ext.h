@@ -30,5 +30,9 @@ namespace std_ext
     {
         return std::get<Index<T, Tuple>::value>(tuple);
     }
-};
 
+    template<typename... Args>
+    struct Pack
+    {
+    };
+};

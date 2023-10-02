@@ -9,14 +9,28 @@
 namespace Events
 {
     template<typename EventType>
-    class EventHandler
+    class EventHandlerBase
     {
     public:
         virtual void Handle(const EventType& type) = 0;
     };
 
-    template<typename EventType>
-    using EventHandlerPointer = std::weak_ptr<EventHandler<EventType>>;
+    template<typename... EventTypes>
+    class EventHandler : public EventHandlerBase<EventTypes>...
+    {
+    public:
+        template<typename EventType>
+        struct handles_type
+        {
+            static constexpr bool value = (std::is_same_v<EventType, EventTypes> || ...);
+        };
+
+        template<typename EventType>
+        static constexpr bool handles_type_v = handles_type<EventType>::value;
+
+        typedef std_ext::Pack<EventTypes...> EventTypesPack;
+        typedef EventHandler<EventTypes...> HandlerType;
+    };
 
     class EventDispatcher
     {
@@ -42,12 +56,24 @@ namespace Events
         }
 
         template<typename EventType>
-        void RegisterHandler(const EventHandlerPointer<EventType>& handler)
+        void RegisterHandler(const std::shared_ptr<EventHandlerBase<EventType>>& handler)
         {
             Handlers<EventType>().handlers.emplace_back(handler);
         }
 
-        template<typename EventType>
+        template<typename... EventTypes>
+        void __RegisterHandler(std_ext::Pack<EventTypes...> pack, const std::shared_ptr<EventHandler<EventTypes...>>& handler)
+        {
+            (RegisterHandler<EventTypes>(handler), ...);
+        }
+
+        template<typename EventHandlerType>
+        void RegisterHandler(const std::shared_ptr<EventHandlerType>& handler)
+        {
+            __RegisterHandler(typename EventHandlerType::EventTypesPack{}, std::static_pointer_cast<typename EventHandlerType::HandlerType>(handler));
+        }
+
+        /*template<typename EventType>
         void ProcessEvents()
         {
             EventArray<EventType>& events = Events<EventType>();
@@ -67,6 +93,18 @@ namespace Events
                 }
 
             events.events.clear();
+        }*/
+
+        void ProcessEvents()
+        {
+            for(auto&[type, event_arr] : events)
+            {
+                auto it = handlers.find(type);
+                if(it != handlers.end())
+                    it->second->Handle(event_arr);
+            }
+            
+            events.clear();
         }
 
     private:
@@ -93,6 +131,8 @@ namespace Events
         public:
             EventHandlerArrayBase() = default;
             virtual ~EventHandlerArrayBase() = default;
+
+            virtual void Handle(const std::shared_ptr<EventArrayBase>& event_arr) = 0;
         };
 
         template<typename EventType>
@@ -102,8 +142,18 @@ namespace Events
             EventHandlerArray() = default;
             virtual ~EventHandlerArray() = default;
 
+            virtual void Handle(const std::shared_ptr<EventArrayBase>& _event_arr) override
+            {
+                const auto& event_arr = std::static_pointer_cast<EventArray<EventType>>(_event_arr);
+                for(std::size_t i = 0; i < event_arr->events.size(); i++)
+                {
+                    for(std::size_t j = 0; j < handlers.size(); j++)
+                        handlers[j]->Handle(event_arr->events[i]);
+                }
+            }
+
         public:
-            std::vector<EventHandlerPointer<EventType>> handlers;
+            std::vector<std::weak_ptr<EventHandlerBase<EventType>>> handlers;
         };
 
     private:
