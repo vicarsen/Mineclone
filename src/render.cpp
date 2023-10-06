@@ -5,15 +5,23 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
-#include "glm.fmt.h"
-#include "blocks.fmt.h"
+#include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 
 #include <vector>
 #include <cassert>
 
+#include "glm.fmt.h"
+#include "blocks.fmt.h"
+
 #include "files.h"
 #include "window.h"
 #include "stb_image.h"
+#include "mathematics.h"
+
+#include "aabb.h"
+#include "frustum.h"
 
 #include "world.h"
 #include "player.h"
@@ -29,92 +37,235 @@ DEFINE_LOG_CATEGORY(ChunkRenderer, FILE_LOGGER(trace, LOGFILE("Render/ChunkRende
 
 namespace Render
 {
-    static unsigned int g_ebo, g_service_buffer;
-    
-    FaceBuffer::FaceBuffer()
+    static std::optional<Buffer> g_ebo;
+
+    Buffer::Buffer() :
+        bytes(0), usage(GL_STATIC_DRAW)
     {
-        TRACE(FaceBuffer, "[{}:constructor]", (unsigned long long) this);
-
-        size = 0;
         glCreateBuffers(1, &buffer);
-
-        TRACE(FaceBuffer, "[{}:constructor] (buffer:{}) glCreateBuffer", (unsigned long long) this, buffer);
-
-        glCreateVertexArrays(1, &vao);
-
-        TRACE(FaceBuffer, "[{}:constructor] (vao:{}) glCreateVertexArrays", (unsigned long long) this, vao);
-
-        glVertexArrayVertexBuffer(vao, 0, buffer, 0, sizeof(Vertex));
-        glVertexArrayElementBuffer(vao, g_ebo);
-
-        glEnableVertexArrayAttrib(vao, 0);
-        glVertexArrayAttribIFormat(vao, 0, 1, GL_INT, offsetof(Vertex, encoded));
-        glVertexArrayAttribBinding(vao, 0, 0);
-
-        TRACE(FaceBuffer, "[{}:constructor] return", (unsigned long long) this);
     }
 
-    FaceBuffer::FaceBuffer(FaceBuffer&& other)
+    Buffer::Buffer(unsigned int usage) :
+        bytes(0), usage(usage)
     {
-        TRACE(FaceBuffer, "[{}:move_constructor] (#other:{})", (unsigned long long) this, (unsigned long long) &other);
+        glCreateBuffers(1, &buffer);
+    }
 
-        std::memcpy(this, &other, sizeof(FaceBuffer));
-        other.vao = other.buffer = 0;
+    Buffer::Buffer(Buffer&& other) :
+        bytes(other.bytes), buffer(other.buffer), usage(other.usage)
+    {
+        other.buffer = 0;
+    }
+
+    Buffer::Buffer(const Buffer& other)
+    {
+        bytes = other.bytes;
+        usage = other.usage;
+        glCreateBuffers(1, &buffer);
+        glNamedBufferData(buffer, bytes, NULL, usage);
+        glCopyNamedBufferSubData(other.buffer, buffer, 0, 0, bytes);
+    }
+
+    Buffer::~Buffer()
+    {
+        if(buffer)
+            glDeleteBuffers(1, &buffer);
+    }
+
+    Buffer& Buffer::operator=(Buffer&& other)
+    {
+        if(buffer)
+            glDeleteBuffers(1, &buffer);
+
+        bytes = other.bytes;
+        buffer = other.buffer;
+        usage = other.usage;
+        other.buffer = 0;
     
-        TRACE(FaceBuffer, "[{}:move_constructor] (buffer:{}) (vao:{}) return", (unsigned long long) this, buffer, vao);
+        return *this;
+    }
+
+    Buffer& Buffer::operator=(const Buffer& other)
+    {
+        bytes = other.bytes;
+        usage = other.usage;
+        glNamedBufferData(buffer, bytes, NULL, usage);
+        glCopyNamedBufferSubData(other.buffer, buffer, 0, 0, bytes);
+        return *this;
+    }
+
+    void Buffer::SetData(unsigned int _bytes, const void* data)
+    {
+        bytes = _bytes;
+        glNamedBufferData(buffer, bytes, data, usage);
+    }
+
+    void Buffer::Clear()
+    {
+        bytes = 0;
+        glNamedBufferData(buffer, 0, NULL, usage);
+    }
+
+    void Buffer::Bind(unsigned int target) const
+    {
+        glBindBuffer(target, buffer);
+    }
+
+    void Buffer::Unbind(unsigned int target) const
+    {
+        glBindBuffer(target, 0);
+    }
+
+    void Buffer::BindBase(unsigned int target, unsigned int index) const
+    {
+        glBindBufferBase(target, index, buffer);
+    }
+
+    void Buffer::UnbindBase(unsigned int target, unsigned int index) const
+    {
+        glBindBufferBase(target, index, 0);
+    }
+
+    VertexArray::VertexArray() :
+        vertex_buffers(0), attribs(0)
+    {
+        glCreateVertexArrays(1, &vao);
+    }
+
+    VertexArray::VertexArray(VertexArray&& other) :
+        vao(other.vao), vertex_buffers(other.vertex_buffers), attribs(other.attribs)
+    {
+        other.vao = 0;
+    }
+
+    VertexArray::~VertexArray()
+    {
+        if(vao)
+            glDeleteVertexArrays(1, &vao);
+    }
+
+    VertexArray& VertexArray::operator=(VertexArray&& other)
+    {
+        if(vao)
+            glDeleteVertexArrays(1, &vao);
+
+        vao = other.vao;
+        vertex_buffers = other.vertex_buffers;
+        attribs = other.attribs;
+        other.vao = 0;
+
+        return *this;
+    }
+
+    unsigned int VertexArray::AddVertexBuffer(const Buffer& vbo, unsigned int offset, unsigned int stride)
+    {
+        glVertexArrayVertexBuffer(vao, vertex_buffers, vbo.Get(), offset, stride);
+        return vertex_buffers++;
+    }
+
+    void VertexArray::SetElementBuffer(const Buffer& ebo)
+    {
+        glVertexArrayElementBuffer(vao, ebo.Get());
+    }
+
+    void VertexArray::AddVertexArrayAttrib(unsigned int buffer, int size, unsigned int type, unsigned int offset)
+    {
+        glEnableVertexArrayAttrib(vao, attribs);
+        switch(type)
+        {
+        case GL_INT:
+            glVertexArrayAttribIFormat(vao, attribs, size, type, offset);
+            break;
+        default:
+            glVertexArrayAttribFormat(vao, attribs, size, type, GL_FALSE, offset);
+            break;
+        }
+        glVertexArrayAttribBinding(vao, attribs++, buffer);
+    }
+
+    void VertexArray::Clear()
+    {
+        for(unsigned int i = 0; i < attribs; i++)
+            glDisableVertexArrayAttrib(vao, i);
+        attribs = 0;
+
+        glVertexArrayElementBuffer(vao, 0);
+
+        for(unsigned int i = 0; i < vertex_buffers; i++)
+            glVertexArrayVertexBuffer(vao, i, 0, 0, 0);
+        vertex_buffers = 0;
+    }
+
+    void VertexArray::Bind() const
+    {
+        glBindVertexArray(vao);
+    }
+
+    void VertexArray::Unbind() const
+    {
+        glBindVertexArray(0);
+    }
+    
+    FaceBuffer::FaceBuffer() :
+        vao(), buffer(GL_STATIC_DRAW)
+    {
+        BuildVAO();
+        size = 0;
+    }
+
+    FaceBuffer::FaceBuffer(FaceBuffer&& other) :
+        vao(std::move(other.vao)), buffer(std::move(other.buffer)), size(other.size)
+    {
     }
 
     FaceBuffer::FaceBuffer(const FaceBuffer& other) :
-        FaceBuffer()
+        vao(), buffer(other.buffer)
     {
-        glNamedBufferData(buffer, other.size * sizeof(FaceMesh), NULL, GL_STATIC_DRAW);
-        glCopyNamedBufferSubData(other.buffer, buffer, 0, 0, other.size * sizeof(FaceMesh));
-
+        BuildVAO();
         size = other.size;
     }
 
     FaceBuffer::~FaceBuffer()
     {
-        TRACE(FaceBuffer, "[{}:destructor] (buffer:{}) (vao:{})", (unsigned long long) this, buffer, vao);
-
-        if(vao != 0) glDeleteVertexArrays(1, &vao);
-        if(buffer != 0) glDeleteBuffers(1, &buffer);
-
-        TRACE(FaceBuffer, "[{}:destructor] return", (unsigned long long) this);
     }
 
     FaceBuffer& FaceBuffer::operator=(FaceBuffer&& other)
     {
-        TRACE(FaceBuffer, "[{}:move_assignment] (#other:{}) (buffer:{}) (vao:{})", (unsigned long long) this, (unsigned long long) &other, buffer, vao);
-
-        if(vao != 0) glDeleteVertexArrays(1, &vao);
-        if(buffer != 0) glDeleteBuffers(1, &buffer);
-
-        std::memcpy(this, &other, sizeof(FaceBuffer));
-        other.vao = other.buffer = 0;
-
-        TRACE(FaceBuffer, "[{}:move_assignment] return", (unsigned long long) this);
+        vao = std::move(other.vao);
+        buffer = std::move(other.buffer);
+        size = other.size;
         return *this;
     }
 
     FaceBuffer& FaceBuffer::operator=(const FaceBuffer& other)
     {
-        glNamedBufferData(buffer, other.size * sizeof(FaceMesh), NULL, GL_STATIC_DRAW);
-        glCopyNamedBufferSubData(other.buffer, buffer, 0, 0, other.size * sizeof(FaceMesh));
-
+        vao.Clear();
+        buffer = other.buffer;
+        BuildVAO();
         size = other.size;
         return *this;
     }
 
     void FaceBuffer::SetData(unsigned int count, const FaceMesh* meshes)
     {
-        glNamedBufferData(buffer, count * sizeof(FaceMesh), meshes, GL_STATIC_DRAW);
         size = count;
+        if(size != 0)
+            buffer.SetData(size * sizeof(FaceMesh), meshes);
+        else buffer.Clear();
     }
 
-    void FaceBuffer::Bind() const
+    void FaceBuffer::Clear()
     {
-        glBindVertexArray(vao);
+        size = 0;
+        buffer.Clear();
+    }
+
+    void FaceBuffer::BuildVAO()
+    {
+        unsigned int buffer_idx = vao.AddVertexBuffer(buffer, 0, sizeof(Vertex));
+        vao.SetElementBuffer(g_ebo.value());
+
+        vao.AddVertexArrayAttrib(buffer_idx, 1, GL_INT, offsetof(Vertex, encoded));
     }
 
     ChunkMesh::ChunkMesh()
@@ -233,9 +384,9 @@ namespace Render
         buffers[(unsigned int) orientation].SetData(count, meshes);
     }
 
-    void ChunkMesh::Bind(unsigned int buffer) const
+    void ChunkMesh::Clear(FaceOrientation orientation)
     {
-        buffers[buffer].Bind();
+        buffers[(unsigned int) orientation].Clear();
     }
 
     static const char* ShaderTypeToString(unsigned int type)
@@ -248,23 +399,42 @@ namespace Render
         }
     }
 
-    static unsigned int CreateShader(const std::string& src, unsigned int type)
+    Shader::Shader(unsigned int type)
     {
-        TRACE(Shaders, "[CreateShader] (#src:{}) (#type:{})", src, type);
+        shader = glCreateShader(type);
+    }
 
-        const char* data = src.data();
-        int length = src.length();
+    Shader::Shader(Shader&& other) :
+        shader(other.shader)
+    {
+        other.shader = 0;
+    }
 
-        unsigned int shader = glCreateShader(type);
-        TRACE(Shaders, "[CreateShader] (shader:{})", shader);
+    Shader::~Shader()
+    {
+        if(shader)
+            glDeleteShader(shader);
+    }
 
-        glShaderSource(shader, 1, &data, &length);
+    Shader& Shader::operator=(Shader&& other)
+    {
+        if(shader)
+            glDeleteShader(shader);
 
-        TRACE(Shaders, "[CreateShader] compile", shader);
+        shader = other.shader;
+        other.shader = 0;
 
+        return *this;
+    }
+
+    void Shader::SetSource(const char* src)
+    {
+        glShaderSource(shader, 1, &src, NULL);
+    }
+
+    bool Shader::Compile()
+    {
         glCompileShader(shader);
-
-        TRACE(Shaders, "[CreateShader] compile return");
 
         int status;
         glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
@@ -275,59 +445,57 @@ namespace Render
 
             std::vector<char> message(log_length + 1, 0);
             glGetShaderInfoLog(shader, log_length, &log_length, message.data());
+            message.back() = '\0';
 
-            ERROR(Shaders, "[CreateShader] (message:{}) compile error", message.data());
+            ERROR(Shaders, "Failed to compile shader! Error:\n%s\n", message.data());
 
-            glDeleteShader(shader);
-            return 0;
+            return false;
         }
 
-        TRACE(Shaders, "[CreateShader] return");
-        return shader;
+        return true;
     }
 
-    VFShader::VFShader(const char* vertex_src_file, const char* fragment_src_file)
+    Program::Program()
     {
-        TRACE(Shaders, "[{}:constructor] (#vertex_src:{}) (#fragment_src:{})", (unsigned long long) this, vertex_src_file, fragment_src_file);
-
-        std::string vertex_src = Files::ReadFile(vertex_src_file);
-        std::string fragment_src = Files::ReadFile(fragment_src_file);
-
-        unsigned int vertex_shader = CreateShader(vertex_src, GL_VERTEX_SHADER);
-        unsigned int fragment_shader = CreateShader(fragment_src, GL_FRAGMENT_SHADER);
-
-        if(vertex_shader == 0)
-        {
-            ERROR(Shaders, "[{}:constructor] vertex shader create error", (unsigned long long) this);
-            return;
-        }
-
-        if(fragment_shader == 0)
-        {
-            ERROR(Shaders, "[{}:constructor] fragment shader create error", (unsigned long long) this);
-            return;
-        }
-
         program = glCreateProgram();
+    }
 
-        TRACE(Shaders, "[{}:constructor] (program:{})", (unsigned long long) this, program);
+    Program::Program(Program&& other) :
+        program(other.program)
+    {
+        other.program = 0;
+    }
 
-        glAttachShader(program, vertex_shader);
-        glAttachShader(program, fragment_shader);
+    Program::~Program()
+    {
+        if(program)
+            glDeleteProgram(program);
+    }
 
-        TRACE(Shaders, "[{}:constructor] link", (unsigned long long) this);
+    Program& Program::operator=(Program&& other)
+    {
+        if(program)
+            glDeleteProgram(program);
 
+        program = other.program;
+        other.program = 0;
+
+        return *this;
+    }
+
+    void Program::Attach(const Shader& shader)
+    {
+        glAttachShader(program, shader.Get());
+    }
+
+    void Program::Detach(const Shader& shader)
+    {
+        glDetachShader(program, shader.Get());
+    }
+
+    bool Program::Link()
+    {
         glLinkProgram(program);
-
-        TRACE(Shaders, "[{}:constructor] link return", (unsigned long long) this);
-
-        glDetachShader(program, vertex_shader);
-        glDetachShader(program, fragment_shader);
-
-        TRACE(Shaders, "[{}:constructor] (vertex_shader:{}) (fragment_shader:{}) vertex, fragment deleted");
-
-        glDeleteShader(vertex_shader);
-        glDeleteShader(fragment_shader);
 
         int status;
         glGetProgramiv(program, GL_LINK_STATUS, &status);
@@ -338,67 +506,150 @@ namespace Render
 
             std::vector<char> message(log_length + 1, 0);
             glGetProgramInfoLog(program, log_length, &log_length, message.data());
+            message.back() = '\0';
 
-            ERROR(Shaders, "[{}:constructor] (message:{}) link error", (unsigned long long) this, message.data());
-
-            glDeleteProgram(program);
-            return;
+            ERROR(Shaders, "Failed to link program! Error:\n%s\n", message.data());
+            return false;
         }
 
-        TRACE(Shaders, "[{}:constructor] return", (unsigned long long) this);
+        return true;
     }
 
-    VFShader::VFShader(VFShader&& other)
+    int Program::GetUniformLocation(const char* name) const
     {
-        program = other.program;
-        other.program = 0;
+        return glGetUniformLocation(program, name);
     }
 
-    VFShader::~VFShader()
+    unsigned int Program::GetUniformBlockIndex(const char* name) const
     {
-        TRACE(Shaders, "[{}:destructor] (program:{}) <>", (unsigned long long) this, program);
-
-        glDeleteProgram(program);
+        return glGetUniformBlockIndex(program, name);
     }
 
-    VFShader& VFShader::operator=(VFShader&& other)
+    unsigned int Program::GetShaderStorageBlockIndex(const char* name) const
     {
-        if(program) glDeleteProgram(program);
-
-        program = other.program;
-        other.program = 0;
-        
-        return *this;
+        return glGetProgramResourceIndex(program, GL_SHADER_STORAGE_BLOCK, name);
     }
 
-    void VFShader::Bind() const
+    void Program::BindUniformBlock(unsigned int target, unsigned int binding) const
+    {
+        glUniformBlockBinding(program, target, binding);
+    }
+
+    void Program::UnbindUniformBlock(unsigned int target) const
+    {
+        glUniformBlockBinding(program, target, 0);
+    }
+
+    void Program::BindShaderStorageBlock(unsigned int target, unsigned int binding) const
+    {
+        glShaderStorageBlockBinding(program, target, binding);
+    }
+
+    void Program::UnbindShaderStorageBlock(unsigned int target) const
+    {
+        glShaderStorageBlockBinding(program, target, 0);
+    }
+
+    void Program::Bind() const
     {
         glUseProgram(program);
     }
 
-    int VFShader::GetUniformLocation(const char* name)
+    void Program::Unbind() const
     {
-        int location = glGetUniformLocation(program, name);
-
-        TRACE(Shaders, "[{}:GetUniformLocation] (#name:{}) (location: {}) <>", (unsigned long long) this, name, location);
-        return location;
+        glUseProgram(0);
     }
 
-    Texture2D::Texture2D(unsigned int _levels, unsigned int _channels, unsigned int _width, unsigned int _height)
+    VFShader::VFShader(const char* vertex_src, const char* fragment_src) :
+        Program()
     {
-        levels = _levels; channels = _channels; width = _width; height = _height;
-        format = (channels == 3 ? GL_RGB8 : GL_RGBA8);
+        Shader vertex_shader(GL_VERTEX_SHADER);
+        vertex_shader.SetSource(vertex_src);
+        if(!vertex_shader.Compile())
+        {
+            ERROR(Shaders, "Failed to compile vertex shader!");
+            return;
+        }
+
+        Shader fragment_shader(GL_FRAGMENT_SHADER);
+        fragment_shader.SetSource(fragment_src);
+        if(!fragment_shader.Compile())
+        {
+            ERROR(Shaders, "Failed to compile fragment shader!");
+            return;
+        }
+
+        Attach(vertex_shader);
+        Attach(fragment_shader);
+
+        if(!Link())
+        {
+            ERROR(Shaders, "Failed to link VF program!");
+            return;
+        }
+
+        Detach(fragment_shader);
+        Detach(vertex_shader);
+    }
+
+    ComputeShader::ComputeShader(const char* src) :
+        Program()
+    {
+        Shader compute_shader(GL_COMPUTE_SHADER);
+        compute_shader.SetSource(src);
+        if(!compute_shader.Compile())
+        {
+            ERROR(Shaders, "Failed to create compute shader!");
+            return;
+        }
+
+        Attach(compute_shader);
+        
+        if(!Link())
+        {
+            ERROR(Shaders, "Failed to link compute program!");
+            return;
+        }
+
+        Detach(compute_shader);
+    }
+
+    static unsigned int TextureFormatToGLFormat(TextureFormat format)
+    {
+        switch(format)
+        {
+        case TextureFormat::R8: return GL_R8;
+        case TextureFormat::R32: return GL_R32F;
+        case TextureFormat::RGB8: return GL_RGB8;
+        case TextureFormat::RGBA8: return GL_RGBA8;
+        }
+    }
+
+    static unsigned int TextureFormatTypeToGLFormat(TextureFormatType format)
+    {
+        switch(format)
+        {
+        case TextureFormatType::RED: return GL_RED;
+        case TextureFormatType::RGB: return GL_RGB;
+        case TextureFormatType::RGBA: return GL_RGBA;
+        }
+    }
+
+    Texture2D::Texture2D(unsigned int _levels, TextureFormat _format, unsigned int _width, unsigned int _height)
+    {
+        format = _format;
+        levels = _levels; width = _width; height = _height;
 
         glCreateTextures(GL_TEXTURE_2D, 1, &texture);
 
         glTextureParameteri(texture, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTextureParameteri(texture, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        glTextureStorage2D(texture, levels, format, width, height);
+        glTextureStorage2D(texture, levels, TextureFormatToGLFormat(format), width, height);
     }
 
     Texture2D::Texture2D(Texture2D&& other) :
-        texture(other.texture), width(other.width), height(other.height), channels(other.channels), levels(other.levels), format(other.format), style(other.style)
+        texture(other.texture), width(other.width), height(other.height), levels(other.levels), format(other.format), style(other.style)
     {
         other.texture = 0;
     }
@@ -414,7 +665,7 @@ namespace Render
 
         texture = other.texture;
         width = other.width; height = other.height;
-        channels = other.channels; levels = other.levels; style = other.style;
+        levels = other.levels; style = other.style;
 
         other.texture = 0;
         return *this;
@@ -437,15 +688,15 @@ namespace Render
         }
     }
 
-    void Texture2D::SetData(const unsigned char* data, unsigned int level, unsigned int channels)
+    void Texture2D::SetData(const unsigned char* data, unsigned int level, TextureFormatType _format)
     {
-        GLenum format = (channels == 3 ? GL_RGB : GL_RGBA);
+        unsigned int format = TextureFormatTypeToGLFormat(_format);
         glTextureSubImage2D(texture, level, 0, 0, width >> level, height >> level, format, GL_UNSIGNED_BYTE, data);
     }
 
-    void Texture2D::SetData(const unsigned char* data, unsigned int level, unsigned int channels, unsigned int x, unsigned int y, unsigned int width, unsigned int height)
+    void Texture2D::SetData(const unsigned char* data, unsigned int level, TextureFormatType _format, unsigned int x, unsigned int y, unsigned int width, unsigned int height)
     {
-        GLenum format = (channels == 3 ? GL_RGB : GL_RGBA);
+        unsigned int format = TextureFormatTypeToGLFormat(_format);
         glTextureSubImage2D(texture, level, x >> level, y >> level, width >> level, height >> level,format, GL_UNSIGNED_BYTE, data);
     }
 
@@ -459,9 +710,24 @@ namespace Render
         glGenerateTextureMipmap(texture);
     }
 
+    void Texture2D::BindImage(unsigned int unit, unsigned int level, unsigned int access) const
+    {
+        glBindImageTexture(unit, texture, level, GL_FALSE, 0, access, TextureFormatToGLFormat(format));
+    }
+
+    void Texture2D::UnbindImage(unsigned int unit) const
+    {
+        glBindImageTexture(unit, 0, 0, GL_FALSE, 0, GL_READ_ONLY, GL_RGBA32F);
+    }
+
     void Texture2D::Bind(unsigned int slot) const
     {
         glBindTextureUnit(slot, texture);
+    }
+
+    void Texture2D::Unbind(unsigned int slot) const
+    {
+        glBindTextureUnit(slot, 0);
     }
 
     TextureAtlas::TextureAtlas()
@@ -496,7 +762,7 @@ namespace Render
         subwidth = textures[0].GetWidth(); subheight = textures[0].GetHeight();
         size = count;
 
-        Texture2D newTexture(textures[0].GetLevels(), textures[0].GetChannelCount(), subwidth * width, subheight * height);
+        Texture2D newTexture(textures[0].GetLevels(), textures[0].GetFormat(), subwidth * width, subheight * height);
         newTexture.SetStyle(TextureStyle::PIXELATED);
 
         texture = std::move(newTexture);
@@ -510,11 +776,6 @@ namespace Render
         }
     }
 
-    void TextureAtlas::Bind(unsigned int slot) const
-    {
-        texture->Bind(slot);
-    }
-
     glm::ivec2 TextureAtlas::CalculateDimensions(unsigned int count) const
     {
         glm::ivec2 dimensions;
@@ -522,6 +783,60 @@ namespace Render
             if(count % i == 0)
                 dimensions = { i, count / i };
         return dimensions;
+    }
+
+    Perlin2DGenerator::Perlin2DGenerator() :
+        gradients_x(0), gradients_y(0)
+    {
+        gradient_buffer.emplace(GL_STATIC_READ);
+
+        std::string compute_src = Files::ReadFile(PATH("shaders/compute/perlin2D.glsl"));
+        shader.emplace(compute_src.c_str());
+    }
+
+    Perlin2DGenerator::Perlin2DGenerator(Perlin2DGenerator&& other) :
+        gradients_x(other.gradients_x), gradients_y(other.gradients_y), gradient_buffer(std::move(other.gradient_buffer)), shader(std::move(other.shader))
+    {
+        gradients_index = shader->GetShaderStorageBlockIndex("gradients");
+    }
+
+    Perlin2DGenerator::~Perlin2DGenerator()
+    {
+        shader.reset();
+        gradient_buffer.reset();
+    }
+
+    Perlin2DGenerator& Perlin2DGenerator::operator=(Perlin2DGenerator&& other)
+    {
+        gradients_x = other.gradients_x;
+        gradients_y = other.gradients_y;
+        gradient_buffer = std::move(other.gradient_buffer);
+        shader = std::move(other.shader);
+        return *this;
+    }
+
+    void Perlin2DGenerator::SetGradients(unsigned int x, unsigned int y, const glm::vec2* gradients)
+    {
+        gradients_x = x; gradients_y = y;
+        gradient_buffer->SetData(gradients_x * gradients_y * sizeof(glm::vec2), gradients);
+    }
+
+    void Perlin2DGenerator::Generate(unsigned int width, unsigned int height, float* out)
+    {
+        Texture2D texture(1, TextureFormat::R32, (gradients_x - 1) * width, (gradients_y - 1) * height);
+
+        shader->Bind();
+        shader->BindShaderStorageBlock(gradients_index, 1);
+        gradient_buffer->BindBase(GL_SHADER_STORAGE_BLOCK, 1);
+        texture.BindImage(0, 0, GL_WRITE_ONLY);
+
+        glDispatchCompute((unsigned int) (texture.GetWidth() / 32), (unsigned int) (texture.GetHeight() / 32), 1);
+        glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
+
+        texture.UnbindImage(0);
+        gradient_buffer->UnbindBase(GL_SHADER_STORAGE_BLOCK, 1);
+        shader->UnbindShaderStorageBlock(gradients_index);
+        shader->Unbind();
     }
 
     static void MessageCallback(GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, GLchar const* message, void const* user_param)
@@ -595,11 +910,7 @@ namespace Render
         glEnable(GL_DEPTH_TEST);
         glEnable(GL_CULL_FACE);
 
-        glCreateBuffers(1, &g_service_buffer);
-        glNamedBufferStorage(g_service_buffer, 1024 * 1024 * 128, NULL, GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT);
-
-        TRACE(Renderer, "[{}:constructor] (g_service_buffer:{})", (unsigned long long) this, g_service_buffer);
-
+        imgui_renderer.emplace(window);
         chunk_renderer.emplace();
 
         TRACE(Renderer, "[{}:constructor] return");
@@ -610,8 +921,7 @@ namespace Render
         TRACE(Renderer, "[{}:destructor]", (unsigned long long) this);
 
         chunk_renderer.reset();
-
-        glDeleteBuffers(1, &g_service_buffer);
+        imgui_renderer.reset();
 
         TRACE(Renderer, "[{}:destructor] return", (unsigned long long) this);
     }
@@ -651,8 +961,8 @@ namespace Render
             indices[6 * i + 5] = 4 * i + 0;
         }
 
-        glCreateBuffers(1, &g_ebo);
-        glNamedBufferStorage(g_ebo, sizeof(unsigned int) * face_count * 6, indices.data(), GL_DYNAMIC_STORAGE_BIT);
+        g_ebo.emplace(GL_STATIC_DRAW);
+        g_ebo->SetData(sizeof(unsigned int) * face_count * 6, indices.data());
 
         chunk_shaders[0] = std::move(LoadShader(PATH("shaders/chunk_packed_64x64x64_xy.vert.glsl"), PATH("shaders/chunk_packed_64x64x64.frag.glsl")));
         
@@ -666,7 +976,9 @@ namespace Render
             return;
         }
 
-        wireframe_shader.emplace(std::move(VFShader(PATH("shaders/chunk_packed_wireframe.vert.glsl"), PATH("shaders/chunk_packed_wireframe.frag.glsl"))));
+        std::string wireframe_vertex_src = Files::ReadFile(PATH("shaders/chunk_packed_wireframe.vert.glsl"));
+        std::string wireframe_fragment_src = Files::ReadFile(PATH("shaders/chunk_packed_wireframe.frag.glsl"));
+        wireframe_shader.emplace(std::move(VFShader(wireframe_vertex_src.c_str(), wireframe_fragment_src.c_str())));
 
         wireframe_shader->model_location = wireframe_shader->shader.GetUniformLocation("u_model");
         wireframe_shader->vp_location = wireframe_shader->shader.GetUniformLocation("u_vp");
@@ -723,12 +1035,15 @@ namespace Render
         for(unsigned int i = 0; i < 3; i++)
             chunk_shaders[i].reset();
 
-        glDeleteBuffers(1, &g_ebo);
+        g_ebo.reset();
     }
 
     std::optional<ChunkRenderer::ChunkShader> ChunkRenderer::LoadShader(const char* vertex_path, const char* fragment_path)
     {
-        ChunkShader shader { .shader = VFShader(vertex_path, fragment_path) };
+        std::string vertex_src = Files::ReadFile(vertex_path);
+        std::string fragment_src = Files::ReadFile(fragment_path);
+
+        ChunkShader shader { .shader = VFShader(vertex_src.c_str(), fragment_src.c_str()) };
         
         shader.vp_location = shader.shader.GetUniformLocation("u_vp");
         if(shader.vp_location == -1)
@@ -803,28 +1118,43 @@ namespace Render
 
     void ChunkRenderer::Render(const ChunkMesh& mesh)
     {
-        switch(draw_mode)
+        if(mesh.BufferSize(active_pipeline) != 0)
         {
-        case DrawMode::NORMAL:
+            switch(draw_mode)
             {
-                ChunkShader& shader = chunk_shaders[active_pipeline].value();
-                glUniformMatrix4fv(shader.model_location, 1, GL_FALSE, glm::value_ptr(mesh.GetModelMatrix()));
-                break;
+            case DrawMode::NORMAL:
+                {
+                    ChunkShader& shader = chunk_shaders[active_pipeline].value();
+                    glUniformMatrix4fv(shader.model_location, 1, GL_FALSE, glm::value_ptr(mesh.GetModelMatrix()));
+                    break;
+                }
+            case DrawMode::WIREFRAME:
+                {
+                    ChunkShader& shader = wireframe_shader.value();
+                    glUniformMatrix4fv(shader.model_location, 1, GL_FALSE, glm::value_ptr(mesh.GetModelMatrix()));
+                    break;
+                }
             }
-        case DrawMode::WIREFRAME:
-            {
-                ChunkShader& shader = wireframe_shader.value();
-                glUniformMatrix4fv(shader.model_location, 1, GL_FALSE, glm::value_ptr(mesh.GetModelMatrix()));
-                break;
-            }
-        }
 
-        mesh.Bind(active_pipeline);
-        glDrawElements(GL_TRIANGLES, mesh.BufferSize(active_pipeline) * 6, GL_UNSIGNED_INT, NULL);
+            mesh.Bind(active_pipeline);
+            glDrawElements(GL_TRIANGLES, mesh.BufferSize(active_pipeline) * 6, GL_UNSIGNED_INT, NULL);
+            mesh.Unbind(active_pipeline);
+        }
     }
 
     void ChunkRenderer::End()
     {
+        switch(draw_mode)
+        {
+        case DrawMode::NORMAL:
+            chunk_shaders[active_pipeline]->shader.Unbind();
+            break;
+        case DrawMode::WIREFRAME:
+            wireframe_shader->shader.Unbind();
+            break;
+        }
+
+        atlas->Unbind(0);
     }
 
     int ChunkRenderer::GetTextureID(const Game::Face& face)
@@ -844,6 +1174,17 @@ namespace Render
         }
     }
 
+    static TextureFormatType ChannelCountToTextureFormatType(int channels)
+    {
+        switch(channels)
+        {
+        case 1: return TextureFormatType::RED;
+        case 3: return TextureFormatType::RGB;
+        case 4: return TextureFormatType::RGBA;
+        default: return TextureFormatType::RGBA;
+        }
+    }
+
     std::optional<Texture2D> ChunkRenderer::LoadTexture(const char* path)
     {
         int width, height, channels;
@@ -855,12 +1196,82 @@ namespace Render
             return std::nullopt;
         }
         
-        Texture2D texture(4, 3, width, height);
-        texture.SetData(data, 0, channels);
+        Texture2D texture(4, TextureFormat::RGB8, width, height);
+        texture.SetData(data, 0, ChannelCountToTextureFormatType(channels));
         texture.GenerateMipmaps();
 
         stbi_image_free(data);
         return texture;
+    }
+
+    void ImGuiWindow::Render()
+    {
+        bool is_opened = opened;
+        if(is_opened)
+        {
+            Draw(&is_opened);
+            if(!is_opened)
+                opened = false;
+        }
+    }
+
+    void ImGuiDemoWindow::Draw(bool* opened)
+    {
+        ImGui::ShowDemoWindow(opened);
+    }
+
+    ImGuiTextureWindow::ImGuiTextureWindow(const char* name, const Texture2D& texture) :
+        name(name), texture(texture.GetInternalTexture()), width(texture.GetWidth()), height(texture.GetHeight())
+    {
+    }
+
+    void ImGuiTextureWindow::Draw(bool* opened)
+    {
+        ImGui::Begin(name.c_str(), opened);
+        ImGui::Image((void*)(intptr_t) texture, ImVec2(width, height));
+        ImGui::End();
+    }
+
+    ImGuiRenderer::ImGuiRenderer(GLFWwindow* _window) :
+        window(_window)
+    {
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+        io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+
+        ImGui_ImplGlfw_InitForOpenGL(window, true);
+        ImGui_ImplOpenGL3_Init();
+    }
+
+    ImGuiRenderer::~ImGuiRenderer()
+    {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+    }
+
+    void ImGuiRenderer::Begin()
+    {
+        ImGui_ImplOpenGL3_NewFrame();
+        ImGui_ImplGlfw_NewFrame();
+        ImGui::NewFrame();
+    }
+    
+    void ImGuiRenderer::End()
+    {
+        ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+        if(ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        {
+            ImGui::UpdatePlatformWindows();
+            ImGui::RenderPlatformWindowsDefault();
+            glfwMakeContextCurrent(window);
+        }
     }
 
     namespace __detail
@@ -870,12 +1281,12 @@ namespace Render
         }
 
         ChunkMeshPool::ChunkMeshPool(ChunkMeshPool&& other) :
-            meshes(std::move(other.meshes)), sparse(std::move(other.sparse)), available(std::move(other.available)), alloc_requests(std::move(other.alloc_requests)), set_faces_requests(std::move(other.set_faces_requests))
+            meshes(std::move(other.meshes))
         {
         }
 
         ChunkMeshPool::ChunkMeshPool(const ChunkMeshPool& other) :
-            meshes(other.meshes), sparse(other.sparse), available(other.available), alloc_requests(other.alloc_requests), set_faces_requests(other.set_faces_requests)
+            meshes(other.meshes)
         {
         }
 
@@ -886,133 +1297,114 @@ namespace Render
         ChunkMeshPool& ChunkMeshPool::operator=(ChunkMeshPool&& other)
         {
             meshes = std::move(other.meshes);
-            sparse = std::move(other.sparse);
-            available = std::move(other.available);
-            alloc_requests = std::move(other.alloc_requests);
-            set_faces_requests = std::move(other.set_faces_requests);
             return *this;
         }
 
         ChunkMeshPool& ChunkMeshPool::operator=(const ChunkMeshPool& other)
         {
             meshes = other.meshes;
-            sparse = other.sparse;
-            available = other.available;
-            alloc_requests = other.alloc_requests;
-            set_faces_requests = other.set_faces_requests;
             return *this;
         }
 
         ChunkMeshPool::Handle ChunkMeshPool::New()
         {
-            std::atomic<bool> fence = false;
-            Handle handle;
-
-            {
-                std::lock_guard<std::mutex> guard(mutex);
-
-                if(!available.empty())
-                {
-                    handle = available.front(); available.pop();
-                    meshes[handle].SetHandle(handle);
-                    
-                    if(sparse.size() <= handle)
-                        sparse.resize(handle + 1, -1);
-
-                    sparse[handle] = handle;
-                    fence = true;
-                }
-                else alloc_requests.emplace(&fence, &handle);
-            }
-
-            while(fence == false);
-            return handle;
+            static Handle handle = 0;
+            meshes[handle] = std::make_shared<ChunkMesh>();
+            meshes[handle]->SetHandle(handle);
+            return handle++;
         }
 
         void ChunkMeshPool::Free(Handle handle)
         {
-            std::lock_guard<std::mutex> guard(mutex);
-            available.emplace(sparse[handle]);
-            meshes[sparse[handle]].SetHandle(-1);
-            sparse[handle] = -1;
+            meshes.erase(handle);
         }
 
-        void ChunkMeshPool::SetFaces(Handle handle, std::vector<FaceMesh>& faces, FaceOrientation orientation)
+        RenderContext::RenderContext()
         {
-            std::lock_guard<std::mutex> guard(mutex);
-            set_faces_requests.emplace(handle, std::move(faces), orientation);
         }
 
-        void ChunkMeshPool::SetTransform(Handle handle, const Game::Transform& transform)
+        RenderContext::~RenderContext()
         {
-            std::lock_guard<std::mutex> guard(mutex);
-            meshes[sparse[handle]].SetModelMatrix(transform.GetMatrix());
         }
 
-        void ChunkMeshPool::HandleRequests()
+        ChunkMeshHandle RenderContext::NewChunkMesh()
         {
-            std::lock_guard<std::mutex> guard(mutex);
+            return chunk_mesh_pool.New();
+        }
 
-            while(!alloc_requests.empty())
+        void RenderContext::FreeChunkMesh(ChunkMeshHandle handle)
+        {
+            chunk_mesh_pool.Free(handle);
+        }
+
+        void RenderContext::AddChunkToRenderQueue(ChunkMeshHandle handle)
+        {
+            std::shared_ptr<ChunkMesh> mesh = chunk_mesh_pool.At(handle);
+            in_render_queue[handle] = render_queue.size();
+            render_queue.emplace_back(handle, mesh);
+        }
+        
+        void RenderContext::AddChunkToRenderQueue(const std::shared_ptr<ChunkMesh>& mesh)
+        {
+            ChunkMeshHandle handle = mesh->GetHandle();
+            in_render_queue[handle] = render_queue.size();
+            render_queue.emplace_back(handle, mesh);
+        }
+
+        void RenderContext::RemoveChunkFromRenderQueue(ChunkMeshHandle handle)
+        {
+            std::size_t idx = in_render_queue[handle];
+            in_render_queue.erase(handle);
+         
+            InternalRemoveChunkFromRenderQueue(idx);
+        }
+
+        void RenderContext::RemoveChunkFromRenderQueue(const std::shared_ptr<ChunkMesh>& mesh)
+        {
+            ChunkMeshHandle handle = mesh->GetHandle();
+            std::size_t idx = in_render_queue[handle];
+            in_render_queue.erase(handle);
+
+            InternalRemoveChunkFromRenderQueue(idx);
+        }
+
+        void RenderContext::AddWindowToRenderQueue(const std::shared_ptr<ImGuiWindow>& window)
+        {
+            window_queue.emplace_back(window);
+        }
+
+        void RenderContext::RemoveWindowFromRenderQueue(const std::shared_ptr<ImGuiWindow>& window)
+        {
+            std::size_t i = 0;
+            while(i < window_queue.size())
             {
-                auto[fence, handle] = alloc_requests.front(); alloc_requests.pop();
-                
-                if(available.empty())
+                auto cur = window_queue[i].lock();
+                if(cur == window)
                 {
-                    *handle = meshes.size();
-                    meshes.emplace_back().SetHandle(*handle);
-                }
-                else
-                {
-                    *handle = available.front(); available.pop();
-                    meshes[*handle].SetHandle(*handle);
-                }
-
-                if(sparse.size() <= *handle)
-                    sparse.resize(*handle + 1, -1);
-
-                sparse[*handle] = *handle;
-                *fence = true;
-            }
-
-            while(!set_faces_requests.empty())
-            {
-                auto& handle = set_faces_requests.front().handle;
-                auto& faces = set_faces_requests.front().faces;
-                auto& orientation = set_faces_requests.front().orientation;
-
-                meshes[sparse[handle]].SetFaces(faces.size(), faces.data(), orientation);
-            
-                set_faces_requests.pop();
-            }
-        }
-
-        void ChunkMeshPool::GarbageCollect()
-        {
-            std::lock_guard<std::mutex> guard(mutex);
-
-            // Very basic (and inefficient) algorithm, but should be fine for our application.
-            // TODO Could be improved in the future.
-            while(available.size() >= CHUNK_SIZE * CHUNK_SIZE * 3)
-            {
-                int idx = available.front(); available.pop();
-
-                if(idx != meshes.size() - 1)
-                {
-                    meshes[idx] = std::move(meshes.back());
-                    int handle = meshes[idx].GetHandle();
-                    if(handle != -1)
-                        sparse[handle] = idx;
+                    InternalRemoveWindowFromRenderQueue(i);
+                    break;
                 }
 
-                meshes.pop_back();
+                i++;
+            }
+        }
+
+        void RenderContext::InternalRemoveChunkFromRenderQueue(std::size_t idx)
+        {
+            if(idx != render_queue.size() - 1)
+            {
+                render_queue[idx] = render_queue.back();
+                in_render_queue[render_queue[idx].first] = idx;
             }
 
-            while(available.size() < CHUNK_SIZE * CHUNK_SIZE)
-            {
-                available.emplace(meshes.size());
-                meshes.emplace_back().SetHandle(-1);
-            }
+            render_queue.pop_back();
+        }
+
+        void RenderContext::InternalRemoveWindowFromRenderQueue(std::size_t idx)
+        {
+            if(idx != window_queue.size() - 1)
+                window_queue[idx] = window_queue.back();
+            window_queue.pop_back();
         }
     };
 
@@ -1034,6 +1426,12 @@ namespace Render
         SetViewport(framebuffer_event.x, framebuffer_event.y, framebuffer_event.width, framebuffer_event.height);
     }
 
+    void RenderThread::Execute(Command&& command)
+    {
+        std::lock_guard<std::mutex> guard(command_queue_mutex);
+        command_queue.emplace(command);
+    }
+
     void RenderThread::SetViewport(float x, float y, float width, float height)
     {
         std::lock_guard<std::mutex> guard(viewport_mutex);
@@ -1047,41 +1445,9 @@ namespace Render
         this->player = player;
     }
 
-    RenderThread::ChunkMeshHandle RenderThread::NewChunkMesh()
-    {
-        return chunk_mesh_pool.New();
-    }
-
-    void RenderThread::FreeChunkMesh(ChunkMeshHandle handle)
-    {
-        chunk_mesh_pool.Free(handle);
-    }
-
-    void RenderThread::SetChunkFaces(ChunkMeshHandle handle, std::vector<FaceMesh>& faces, FaceOrientation orientation)
-    {
-        chunk_mesh_pool.SetFaces(handle, faces, orientation);
-    }
-
-    void RenderThread::SetChunkTransform(ChunkMeshHandle handle, const Game::Transform& transform)
-    {
-        chunk_mesh_pool.SetTransform(handle, transform);
-    }
-
     int RenderThread::GetBlockTextureID(const Game::Face& face)
     {
         return renderer->GetChunkRenderer().GetTextureID(face);
-    }
-
-    void RenderThread::AddChunkToDrawCall(ChunkMeshHandle handle)
-    {
-        std::lock_guard<std::mutex> guard(chunks_draw_set_mutex);
-        chunks_draw_set.emplace(handle);
-    }
-
-    void RenderThread::RemoveChunkFromDrawCall(ChunkMeshHandle handle)
-    {
-        std::lock_guard<std::mutex> guard(chunks_draw_set_mutex);
-        chunks_draw_set.erase(handle);
     }
 
     void RenderThread::SetChunkDrawMode(ChunkRenderer::DrawMode draw_mode)
@@ -1093,77 +1459,31 @@ namespace Render
     void RenderThread::Run(GLFWwindow* window)
     {
         renderer.emplace(window);
-        ChunkRenderer& chunk_renderer = renderer->GetChunkRenderer();
 
-        {
-            std::lock_guard<std::mutex> guard(viewport_mutex);
-
-            viewport_changed = false;
-            glfwGetFramebufferSize(window, &vp_width, &vp_height);
-            vp_x = vp_y = 0;
-        }
+        InitViewport(window);
+        InitImGuiWindows();
 
         initialized = true;
 
         float last_time = glfwGetTime();
-        int count = 0;
+        int count = 0, chunks_rendered_total = 0;
         while(!exit)
         {
             float render_start_time = glfwGetTime();
 
-            chunk_mesh_pool.HandleRequests();
-            chunk_mesh_pool.GarbageCollect();
+            ProcessCommands();
 
-            {
-                std::lock_guard<std::mutex> guard(viewport_mutex);
+            if(viewport_changed)
+                UpdateViewport();
 
-                if(viewport_changed)
-                {
-                    viewport_changed = false;
-                    renderer->SetViewport(vp_x, vp_y, vp_width, vp_height);
-
-                    std::lock_guard<std::mutex> player_guard(player_mutex);
-                    if(player)
-                        player->SetAspectRatio(vp_width * 1.0f / vp_height);
-                }
-            }
-
-            static glm::mat4 vp_matrix = glm::mat4(1.0f);
-            
-            {
-                std::lock_guard<std::mutex> player_guard(player_mutex);
-                if(player)
-                    vp_matrix = player->GetProjection() * glm::inverse(player->GetTransform().GetMatrix());
-            }
+            glm::mat4 vp_matrix = GetVPMatrix();
+            Math::Frustum frustum(vp_matrix);
 
             renderer->Begin();
-                
             renderer->SetVPMatrix(vp_matrix);
 
-            {
-                std::lock_guard<std::mutex> chunk_render_guard(chunk_render_mutex);
-                chunk_renderer.Begin();
-
-                std::unordered_set<ChunkMeshHandle> chunks_draw_set_copy;
-
-                {
-                    std::lock_guard<std::mutex> chunks_draw_set_guard(chunks_draw_set_mutex);
-                    chunks_draw_set_copy = chunks_draw_set;
-                }
-
-                for(unsigned int i = 0; i < 3; i++)
-                {
-                    chunk_renderer.Begin((FaceOrientation) i);
-                    for(ChunkMeshHandle handle : chunks_draw_set_copy)
-                    {
-                        std::lock_guard<std::mutex> chunk_mesh_pool_guard(chunk_mesh_pool.GetMutex());
-                        if(chunk_mesh_pool.Has(handle))
-                            chunk_renderer.Render(chunk_mesh_pool.at(handle));
-                    }
-                }
- 
-                chunk_renderer.End();
-            }
+            chunks_rendered_total += RenderChunks(frustum);
+            RenderImGui();
 
             renderer->End();
 
@@ -1181,12 +1501,120 @@ namespace Render
             if(time - last_time >= 5.0f)
             {
                 WARN(LogTemp, "Render avg: {} fps", count / (time - last_time));
+                WARN(LogTemp, "Chunks rendered avg: {} cpf", chunks_rendered_total * 1.0f / count);
                 last_time = time;
-                count = 0;
+                count = 0; chunks_rendered_total = 0;
             }
         }
 
+        DestroyImGuiWindows();
+
         renderer.reset();
+    }
+
+    void RenderThread::InitViewport(GLFWwindow* window)
+    {
+        std::lock_guard<std::mutex> guard(viewport_mutex);
+
+        vp_x = vp_y = 0;
+        glfwGetFramebufferSize(window, &vp_width, &vp_height);
+        viewport_changed = false;
+    }
+
+    void RenderThread::InitImGuiWindows()
+    {
+        imgui_demo_window = std::make_shared<ImGuiDemoWindow>();
+        imgui_demo_window->SetOpened(false);
+        render_context.AddWindowToRenderQueue(imgui_demo_window);
+
+        imgui_block_texture_atlas_window = std::make_shared<ImGuiTextureWindow>("Block Texture Atlas", renderer->GetChunkRenderer().GetAtlas().GetTexture());
+        imgui_block_texture_atlas_window->SetOpened(false);
+        render_context.AddWindowToRenderQueue(imgui_block_texture_atlas_window);
+    }
+
+    void RenderThread::ProcessCommands()
+    {
+        std::lock_guard<std::mutex> guard(command_queue_mutex);
+        while(!command_queue.empty())
+        {
+            command_queue.front()(render_context);
+            command_queue.pop();
+        }
+    }
+
+    void RenderThread::UpdateViewport()
+    {
+        std::lock_guard<std::mutex> guard(viewport_mutex);
+
+        viewport_changed = false;
+        renderer->SetViewport(vp_x, vp_y, vp_width, vp_height);
+    }
+
+    glm::mat4 RenderThread::GetVPMatrix()
+    {
+        std::lock_guard<std::mutex> player_guard(player_mutex);
+        if(player)
+            return player->GetProjection() * glm::inverse(player->GetTransform().GetMatrix());
+        else return glm::mat4(1.0f);
+    }
+
+    int RenderThread::RenderChunks(const Math::Frustum& frustum)
+    {
+        std::lock_guard<std::mutex> chunk_render_guard(chunk_render_mutex);
+
+        ChunkRenderer& chunk_renderer = renderer->GetChunkRenderer();
+        chunk_renderer.Begin();
+
+        int total = 0;
+        for(unsigned int i = 0; i < 3; i++)
+        {
+            chunk_renderer.Begin((FaceOrientation) i);
+            for(std::size_t j = 0; j < render_context.render_queue.size(); )
+                if(auto mesh = render_context.render_queue[j].second.lock())
+                {
+                    if(IsChunkOnScreen(mesh, frustum))
+                    {
+                        chunk_renderer.Render(*mesh);
+                        total++;
+                    }
+                    j++;
+                }
+                else render_context.InternalRemoveChunkFromRenderQueue(j);
+        }
+
+        chunk_renderer.End();
+        return total;
+    }
+
+    bool RenderThread::IsChunkOnScreen(const std::shared_ptr<ChunkMesh>& mesh, const Math::Frustum& frustum)
+    {
+        Math::AABB aabb = { mesh->GetModelMatrix() * glm::vec4(0.0f, 0.0f, 0.0f, 1.0f),
+                            mesh->GetModelMatrix() * glm::vec4(CHUNK_SIZE, CHUNK_SIZE, CHUNK_SIZE, 1.0f) };
+
+        return frustum.IsAABBVisible(aabb);                    
+    }
+
+    void RenderThread::RenderImGui()
+    {
+        std::lock_guard<std::mutex> imgui_render_guard(imgui_render_mutex);
+
+        ImGuiRenderer& imgui_renderer = renderer->GetImGuiRenderer();
+        imgui_renderer.Begin();
+
+        for(std::size_t i = 0; i < render_context.window_queue.size(); )
+            if(auto window = render_context.window_queue[i].lock())
+            {
+                window->Render();
+                i++;
+            }
+            else render_context.InternalRemoveWindowFromRenderQueue(i);
+
+        imgui_renderer.End();
+    }
+
+    void RenderThread::DestroyImGuiWindows()
+    {
+        imgui_demo_window.reset();
     }
 };
 

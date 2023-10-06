@@ -23,21 +23,22 @@ Application::Application()
     event_dispatcher = std::make_shared<Events::EventDispatcher>();
 
     window = std::make_shared<Window::Window>(800, 600, "Mineclone");
-    input_handler = std::make_shared<Input::InputHandler>(window->GetInternalWindow());
 
-    event_dispatcher->RegisterHandler<Input::KeyEvent>(input_handler);
-    event_dispatcher->RegisterHandler<Input::ButtonEvent>(input_handler);
-    event_dispatcher->RegisterHandler<Input::CursorMovedEvent>(input_handler);
+    application_handler = std::make_shared<ApplicationHandler>();
+    event_dispatcher->RegisterHandler(application_handler);
+
+    input_handler = std::make_shared<Input::InputHandler>(window->GetInternalWindow());
+    event_dispatcher->RegisterHandler(input_handler);
 
     profiler_thread = std::make_shared<Profiler::ProfilerThread>();
 
     render_thread = std::make_shared<Render::RenderThread>(window->GetInternalWindow());
     while(!render_thread->IsInitialized());
     render_thread->SetChunkDrawMode(Render::ChunkRenderer::DrawMode::NORMAL);
-
-    event_dispatcher->RegisterHandler<Render::FramebufferEvent>(render_thread);
+    event_dispatcher->RegisterHandler(render_thread);
 
     player = std::make_shared<Game::Player>(90.0f, window->GetAspectRatio());
+    event_dispatcher->RegisterHandler(player);
     render_thread->SetPlayer(player);
 
     world_load_thread = std::make_shared<Game::WorldLoadThread>();
@@ -67,9 +68,18 @@ Application::~Application()
     instance = nullptr;
 }
 
+void ApplicationHandler::Handle(const Input::KeyEvent& key_event)
+{
+    if(key_event.key == GLFW_KEY_ESCAPE && key_event.action == Input::InputAction::RELEASED)
+    {
+        Application::Get()->GetInputHandler().ToggleCursor();
+        Application::Get()->GetInputHandler().ToggleCaptureCursorMovement();
+    }
+}
+
 void Application::Run()
 {
-    const float player_speed = 5.0f, player_sensitivity = 0.1f;
+    const float player_speed = 5.0f, player_warp_speed = 200.0f, player_sensitivity = 0.1f;
     float player_pitch = 0.0f;
     float player_yaw = 0.0f;
     
@@ -83,10 +93,7 @@ void Application::Run()
         glfwPollEvents();
         input_handler->Update();
 
-        event_dispatcher->ProcessEvents<Input::KeyEvent>();
-        event_dispatcher->ProcessEvents<Input::ButtonEvent>();
-        event_dispatcher->ProcessEvents<Input::CursorMovedEvent>();
-        event_dispatcher->ProcessEvents<Render::FramebufferEvent>();
+        event_dispatcher->ProcessEvents();
 
         float time = glfwGetTime();
         delta_time = time - last_time;
@@ -105,23 +112,25 @@ void Application::Run()
 
         glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
+        float speed = (input_handler->IsKeyPressed(GLFW_KEY_LEFT_CONTROL) ? player_warp_speed : player_speed);
+
         if(input_handler->IsKeyPressed(GLFW_KEY_A)) {
-            player->GetTransform().Position() -= delta_time * player_speed * right;
+            player->GetTransform().Position() -= delta_time * speed * right;
         }
         if(input_handler->IsKeyPressed(GLFW_KEY_D)) {
-            player->GetTransform().Position() += delta_time * player_speed * right;
+            player->GetTransform().Position() += delta_time * speed * right;
         }
         if(input_handler->IsKeyPressed(GLFW_KEY_W)) {
-            player->GetTransform().Position() += delta_time * player_speed * forward;
+            player->GetTransform().Position() += delta_time * speed * forward;
         }
         if(input_handler->IsKeyPressed(GLFW_KEY_S)) {
-            player->GetTransform().Position() -= delta_time * player_speed * forward;
+            player->GetTransform().Position() -= delta_time * speed * forward;
         }
         if(input_handler->IsKeyPressed(GLFW_KEY_SPACE)) {
-            player->GetTransform().Position() += delta_time * player_speed * up;
+            player->GetTransform().Position() += delta_time * speed * up;
         }
         if(input_handler->IsKeyPressed(GLFW_KEY_LEFT_SHIFT)) {
-            player->GetTransform().Position() -= delta_time * player_speed * up;
+            player->GetTransform().Position() -= delta_time * speed * up;
         }
 
         count++;
@@ -130,6 +139,9 @@ void Application::Run()
         if(time - last_print >= 5.0f)
         {
             WARN(LogTemp, "Update avg: {} fps", count / (time - last_print));
+
+            ERROR(LogTemp, "Player height: {}", player->GetTransform().Position().y);
+
             last_print = time;
             count = 0;
         }

@@ -3,16 +3,20 @@
 #include "logger.h"
 
 #include "transform.h"
+#include "events.h"
+#include "render.h"
 
 DECLARE_LOG_CATEGORY(Player);
 
 namespace Game
 {
-    class Player
+    class Player : public Events::EventHandler<Render::FramebufferEvent>
     {
     public:
         Player(float fov, float aspect_ratio);
         ~Player();
+
+        virtual void Handle(const Render::FramebufferEvent& event) override;
 
         inline Transform& GetTransform() noexcept { return transform; }
         inline const Transform& GetTransform() const noexcept { return transform; }

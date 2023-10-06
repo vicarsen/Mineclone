@@ -45,7 +45,9 @@ namespace Input
         glfwSetMouseButtonCallback(window, __mouse_button_callback_fn);
         glfwSetCursorPosCallback(window, __cursor_pos_callback_fn);
 
+        cursor_mode = CursorMode::DISABLED;
         glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+        capture_cursor_movement = true;
 
         double xpos, ypos;
         glfwGetCursorPos(window, &xpos, &ypos);
@@ -73,12 +75,15 @@ namespace Input
 
     void InputHandler::Update()
     {
-        double xpos, ypos;
-        glfwGetCursorPos(window, &xpos, &ypos);
-        glm::vec2 new_position = { xpos, ypos };
+        if(capture_cursor_movement)
+        {
+            double xpos, ypos;
+            glfwGetCursorPos(window, &xpos, &ypos);
+            glm::vec2 new_position = { xpos, ypos };
 
-        cursor_movement = new_position - cursor_position;
-        cursor_position = new_position;
+            cursor_movement = new_position - cursor_position;
+            cursor_position = new_position;
+        }
     }
 
     void InputHandler::Handle(const KeyEvent& key_event)
@@ -181,6 +186,12 @@ namespace Input
     glm::vec2 InputHandler::GetCursorMovement()
     {
         return cursor_movement;
+    }
+
+    void InputHandler::SetCursorMode(CursorMode _cursor_mode)
+    {
+        cursor_mode = _cursor_mode;
+        glfwSetInputMode(window, GLFW_CURSOR, cursor_mode == CursorMode::ENABLED ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED);
     }
 };
 

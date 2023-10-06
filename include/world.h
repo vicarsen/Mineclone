@@ -52,21 +52,24 @@ namespace Game
         Game::Transform transform;
         glm::ivec3 coords;
 
-        Render::RenderThread::ChunkMeshHandle mesh_handle;
+        Render::ChunkMeshHandle mesh_handle;
         
         bool geometry_built = false;
+        bool is_empty = true;
     };
 
     class ChunkGenerator
     {
     public:
         virtual void GenerateChunk(Game::Chunk& chunk, const glm::ivec3& chunk_coordinates) = 0;
+        virtual bool IsEmpty(const glm::ivec3& position) = 0;
     };
 
     class SuperflatChunkGenerator : public ChunkGenerator
     {
     public:
          virtual void GenerateChunk(Game::Chunk& chunk, const glm::ivec3& chunk_coordinates) override;
+         virtual bool IsEmpty(const glm::ivec3& position) override;
     };
 
     class World
@@ -85,6 +88,8 @@ namespace Game
 
         Chunk& LoadChunk(const glm::ivec3& chunk_coordinates);
         void UnloadChunk(const glm::ivec3& chunk_coordinates);
+
+        Chunk& TransposeChunk(const glm::ivec3& from, const glm::ivec3& to);
 
         Chunk& GetChunk(const glm::ivec3& chunk_coordinates);
         const Chunk& GetChunk(const glm::ivec3& chunk_coordinates) const;
@@ -121,6 +126,8 @@ namespace Game
 
         void SetWorld(const std::shared_ptr<World>& world);
 
+        inline const std::atomic<bool>& IsInitialized() const noexcept { return initialized; }
+
     private:
         struct LoadTarget
         {
@@ -131,11 +138,19 @@ namespace Game
     private:
         void Run();
 
+        void RunLoadPass();
+
+        void FindLoadTargets(std::vector<LoadTarget>& targets);
         void FindChunksInSphere(const glm::ivec3& center, float radius, std::unordered_set<glm::ivec3>& out);
+        void FilterChunks(std::unordered_set<glm::ivec3>& chunks);
+        void FindChunksToLoadOrUnload(std::unordered_set<glm::ivec3>& required, std::vector<glm::ivec3>& to_load, std::vector<glm::ivec3>& to_unload);
+        void SortChunks(std::vector<glm::ivec3>& chunks, const glm::ivec3& target);
+        void LoadAndUnloadChunks(const std::vector<glm::ivec3>& to_load, const std::vector<glm::ivec3>& to_unload);
 
     private:
         std::thread thread;
         std::atomic<bool> exit;
+        std::atomic<bool> initialized;
 
         std::shared_ptr<World> world;
         mutable std::mutex world_mutex;

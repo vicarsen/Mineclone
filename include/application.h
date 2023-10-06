@@ -12,6 +12,12 @@
 
 DECLARE_LOG_CATEGORY(Application);
 
+class ApplicationHandler : public Events::EventHandler<Input::KeyEvent>
+{
+public:
+    virtual void Handle(const Input::KeyEvent& key_event) override;
+};
+
 class Application
 {
 public:
@@ -22,6 +28,9 @@ public:
 
     inline Render::RenderThread& GetRenderThread() noexcept { return *render_thread; }
     inline const Render::RenderThread& GetRenderThread() const noexcept { return *render_thread; }
+
+    inline Input::InputHandler& GetInputHandler() noexcept { return *input_handler; }
+    inline const Input::InputHandler& GetInputHandler() const noexcept { return *input_handler; }
 
     template<typename EventType>
     void DispatchEvent(const EventType& event)
@@ -43,6 +52,7 @@ private:
     std::shared_ptr<Game::WorldLoadThread> world_load_thread;
 
     std::shared_ptr<Window::Window> window;
+    std::shared_ptr<ApplicationHandler> application_handler;
     std::shared_ptr<Input::InputHandler> input_handler;
     std::shared_ptr<Events::EventDispatcher> event_dispatcher;
 

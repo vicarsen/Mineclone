@@ -147,8 +147,17 @@ namespace Events
                 const auto& event_arr = std::static_pointer_cast<EventArray<EventType>>(_event_arr);
                 for(std::size_t i = 0; i < event_arr->events.size(); i++)
                 {
-                    for(std::size_t j = 0; j < handlers.size(); j++)
-                        handlers[j]->Handle(event_arr->events[i]);
+                    for(std::size_t j = 0; j < handlers.size(); )
+                        if(auto handler = handlers[j].lock())
+                        {
+                            handler->Handle(event_arr->events[i]);
+                            j++;
+                        }
+                        else
+                        {
+                            handlers[j] = handlers.back();
+                            handlers.pop_back();
+                        }
                 }
             }
 

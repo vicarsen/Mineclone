@@ -13,7 +13,7 @@ out vec2 frag_tex_coords;
 
 float extractX(int encoded)
 {
-    return float((encoded >> 25));
+    return float((encoded >> 25) & ((1 << 7) - 1));
 }
 
 float extractY(int encoded)

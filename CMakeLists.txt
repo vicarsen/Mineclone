@@ -7,6 +7,7 @@ add_subdirectory(./vendor/glad)
 add_subdirectory(./vendor/glfw)
 add_subdirectory(./vendor/glm)
 add_subdirectory(./vendor/spdlog)
+add_subdirectory(./vendor/imgui)
 
 project(Mineclone)
 
@@ -16,6 +17,7 @@ add_executable(${PROJECT_NAME}
     ./src/logger.cpp
     ./src/files.cpp
     ./src/mathematics.cpp
+    ./src/frustum.cpp
 
     ./src/input.cpp
     ./src/window.cpp
@@ -29,10 +31,17 @@ add_executable(${PROJECT_NAME}
     ./src/player.cpp
 
     ./src/application.cpp
+
+    ## ImGui Backends
+    ./vendor/imgui/backends/imgui_impl_glfw.cpp
+    ./vendor/imgui/backends/imgui_impl_opengl3.cpp
 )
 
 target_include_directories(${PROJECT_NAME} PUBLIC
     ./include
+
+    ## ImGui Backends
+    ./vendor/imgui/backends/
 )
 
 target_link_libraries(${PROJECT_NAME} PUBLIC
@@ -40,5 +49,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     glfw
     glm::glm
     spdlog
+    ImGui
 )
 

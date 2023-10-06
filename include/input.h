@@ -11,6 +11,7 @@ DECLARE_LOG_CATEGORY(Input);
 namespace Input
 {
     enum class InputAction { NONE = 0, PRESSED, RELEASED };
+    enum class CursorMode { DISABLED = 0, ENABLED };
 
     struct KeyEvent
     {
@@ -31,7 +32,7 @@ namespace Input
 
     InputAction GLFWActionToInputAction(int action);
 
-    class InputHandler : public Events::EventHandler<KeyEvent>, public Events::EventHandler<ButtonEvent>, public Events::EventHandler<CursorMovedEvent>
+    class InputHandler : public Events::EventHandler<KeyEvent, ButtonEvent, CursorMovedEvent>
     {
     public:
         InputHandler(GLFWwindow* window);
@@ -63,6 +64,15 @@ namespace Input
         glm::vec2 GetCursorPosition();
         glm::vec2 GetCursorMovement();
 
+        inline CursorMode GetCursorMode() const noexcept { return cursor_mode; }
+        void SetCursorMode(CursorMode cursor_mode);
+
+        inline void ToggleCursor() { SetCursorMode(cursor_mode == CursorMode::DISABLED ? CursorMode::ENABLED : CursorMode::DISABLED); }
+
+        inline bool GetCaptureCursorMovement() const noexcept { return capture_cursor_movement; }
+        inline void SetCaptureCursorMovement(bool movement) noexcept { capture_cursor_movement = movement; }
+        inline void ToggleCaptureCursorMovement() noexcept { capture_cursor_movement = !capture_cursor_movement; }
+
     private:
         bool keys_pressed[GLFW_KEY_LAST + 1];
         bool keys_just_pressed[GLFW_KEY_LAST + 1];
@@ -74,6 +84,9 @@ namespace Input
 
         glm::vec2 cursor_position;
         glm::vec2 cursor_movement;
+
+        CursorMode cursor_mode;
+        bool capture_cursor_movement;
 
         GLFWwindow* window;
     };

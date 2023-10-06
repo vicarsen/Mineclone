@@ -16,7 +16,7 @@
 DEFINE_LOG_CATEGORY(Chunk, FILE_LOGGER(trace, LOGFILE("World/Chunk.txt")));
 DEFINE_LOG_CATEGORY(World, FILE_LOGGER(trace, LOGFILE("world/World.txt")));
 
-static constexpr int encode(int x, int y, int z, int texture)
+static constexpr unsigned int encode(unsigned int x, unsigned int y, unsigned int z, unsigned int texture)
 {
     return (texture) | (z << 11) | (y << 18) | (x << 25);
 }
@@ -89,7 +89,7 @@ namespace Game
     }
 
     Chunk::Chunk(Chunk&& other) :
-        transform(other.transform), coords(other.coords), geometry_built(other.geometry_built), mesh_handle(other.mesh_handle)
+        transform(other.transform), coords(other.coords), geometry_built(other.geometry_built), is_empty(other.is_empty), mesh_handle(other.mesh_handle)
     {
         TRACE(Chunk, "[{}:move_constructor] (#other:{}) <>", (unsigned long long) this, (unsigned long long) &other);
 
@@ -105,8 +105,11 @@ namespace Game
         {
             Render::RenderThread& render_thread = Application::Get()->GetRenderThread();
             
-            render_thread.RemoveChunkFromDrawCall(mesh_handle);
-            render_thread.FreeChunkMesh(mesh_handle);
+            render_thread.Execute([handle = mesh_handle](auto& render_context)
+            {
+                render_context.FreeChunkMesh(handle);
+            });
+
         }
     }
 
@@ -117,9 +120,11 @@ namespace Game
         if(mesh_handle != -1) 
         {
             Render::RenderThread& render_thread = Application::Get()->GetRenderThread();
-            
-            render_thread.RemoveChunkFromDrawCall(mesh_handle);
-            render_thread.FreeChunkMesh(mesh_handle);
+         
+            render_thread.Execute([handle = mesh_handle](auto& render_context)
+            {
+                render_context.FreeChunkMesh(handle);
+            });
         }
 
         transform = other.transform;
@@ -128,6 +133,8 @@ namespace Game
         std::memcpy(blocks, other.blocks, sizeof(blocks));
 
         geometry_built = other.geometry_built;
+        is_empty = other.is_empty;
+
         mesh_handle = other.mesh_handle;
         other.mesh_handle = -1;
 
@@ -162,9 +169,27 @@ namespace Game
 
         if(is_chunk_empty)
         {
+            if(!is_empty && mesh_handle != -1)
+            {
+                Render::RenderThread& render_thread = Application::Get()->GetRenderThread();
+                render_thread.Execute([mesh_handle = mesh_handle](auto& render_context)
+                {
+                    if(render_context.IsChunkInRenderQueue(mesh_handle))
+                        render_context.RemoveChunkFromRenderQueue(mesh_handle);
+
+                    const auto& mesh = render_context.Get(mesh_handle);
+                    mesh->Clear(Render::FaceOrientation::XOY);
+                    mesh->Clear(Render::FaceOrientation::YOZ);
+                    mesh->Clear(Render::FaceOrientation::ZOX);
+                });
+            }
+
+            is_empty = true;
             geometry_built = true;
             return;
         }
+        
+        is_empty = false;
 
         for(int i = 0; i < 3; i++)
             for(int x = 0; x <= CHUNK_SIZE; x++)
@@ -310,9 +335,6 @@ namespace Game
                     LazyMesh(x, faces[i][x], (Render::FaceOrientation) i, face_meshes[i]);
 
         geometry_built = true;
-
-        if(face_meshes[0].size() + face_meshes[1].size() + face_meshes[2].size() == 0)
-            return;
         
         {
             PROFILE_SCOPE(RenderSync);
@@ -320,13 +342,37 @@ namespace Game
             Render::RenderThread& render_thread = Application::Get()->GetRenderThread();
             if(mesh_handle == -1)
             {
-                mesh_handle = render_thread.NewChunkMesh();
-                render_thread.SetChunkTransform(mesh_handle, transform);
-                render_thread.AddChunkToDrawCall(mesh_handle);
-            }
+                std::atomic<bool> done = false;
+                render_thread.Execute([&done, handle = &mesh_handle, model_matrix = transform.GetMatrix(), face_meshes](auto& render_context)
+                {
+                    *handle = render_context.NewChunkMesh();
+                    const auto& mesh = render_context.Get(*handle);
 
-            for(int i = 0; i < 3; i++)
-                render_thread.SetChunkFaces(mesh_handle, face_meshes[i], (Render::FaceOrientation) i);
+                    mesh->SetModelMatrix(model_matrix);
+                    for(std::size_t i = 0; i < 3; i++)
+                        mesh->SetFaces(face_meshes[i].size(), face_meshes[i].data(), (Render::FaceOrientation) i);
+
+                    render_context.AddChunkToRenderQueue(mesh);
+                    
+                    done = true;
+                });
+
+                while(!done);
+            }
+            else
+            {
+                render_thread.Execute([handle = mesh_handle, model_matrix = transform.GetMatrix(), mesh_0 = std::move(face_meshes[0]), mesh_1 = std::move(face_meshes[1]), mesh_2 = std::move(face_meshes[2])](auto& render_context)
+                {
+                    const auto& mesh = render_context.Get(handle);
+                    mesh->SetFaces(mesh_0.size(), mesh_0.data(), (Render::FaceOrientation) 0);
+                    mesh->SetFaces(mesh_1.size(), mesh_1.data(), (Render::FaceOrientation) 1);
+                    mesh->SetFaces(mesh_2.size(), mesh_2.data(), (Render::FaceOrientation) 2);
+                    mesh->SetModelMatrix(model_matrix);
+
+                    if(!render_context.IsChunkInRenderQueue(handle))
+                        render_context.AddChunkToRenderQueue(mesh);
+                });
+            }
         }
     }
 
@@ -537,6 +583,18 @@ namespace Game
         chunks.pop_back();
     }
 
+    Chunk& World::TransposeChunk(const glm::ivec3& from, const glm::ivec3& to)
+    {
+        unsigned int chunk_idx = chunk_index.at(from);
+        chunk_index.erase(from);
+        chunk_index.emplace(to, chunk_idx);
+
+        Chunk& chunk = chunks[chunk_idx];
+        chunk.SetCoordinates(to);
+        chunk.GetTransform().Position() = to * CHUNK_SIZE;
+        return chunk;
+    }
+
     Chunk& World::GetChunk(const glm::ivec3& chunk_coordinates)
     {
         return chunks.at(chunk_index.at(chunk_coordinates));
@@ -577,18 +635,30 @@ namespace Game
             FillLayer(chunk, 1, VanillaBlocks::DIRT_BLOCK);
             FillLayer(chunk, 2, VanillaBlocks::DIRT_BLOCK);
             FillLayer(chunk, 3, VanillaBlocks::DIRT_BLOCK);
-            FillLayer(chunk, 4, VanillaBlocks::GRASS_BLOCK);
 
             if(coords.x == 0)
-            {
                 FillLayer(chunk, 4, VanillaBlocks::BEDROCK_BLOCK);
-            }
+            else FillLayer(chunk, 4, VanillaBlocks::GRASS_BLOCK);
+        
+            for(int y = 5; y < CHUNK_SIZE; y++)
+                FillLayer(chunk, y, VanillaBlocks::AIR_BLOCK);
         }
+        else
+        {
+            for(int y = 0; y < CHUNK_SIZE; y++)
+                FillLayer(chunk, y, VanillaBlocks::AIR_BLOCK);
+        }
+    }
+
+    bool SuperflatChunkGenerator::IsEmpty(const glm::ivec3& position)
+    {
+        return position.y != 0;
     }
 
     WorldLoadThread::WorldLoadThread()
     {
         exit = false;
+        initialized = false;
         world = nullptr;
         thread = std::move(std::thread([&]() { Run(); }));
     }
@@ -629,93 +699,15 @@ namespace Game
 
     void WorldLoadThread::Run()
     {
+        initialized = true;
+
         float last_time = glfwGetTime();
         int count = 0;
         while(!exit)
         {
             float world_load_start_time = glfwGetTime();
 
-            if(world != nullptr)
-            {
-                std::vector<LoadTarget> load_targets;
-
-                {
-                    std::lock_guard<std::mutex> guard(players_mutex);
-                    for(int i = 0; i < players.size(); i++)
-                        load_targets.emplace_back(World::GlobalCoordinatesToChunkCoordinates(players[i]->GetTransform().Position()), players[i]->GetRenderDistance());
-                }
-
-                std::unordered_set<glm::ivec3> required_chunks;
-                for(int i = 0; i < load_targets.size(); i++)
-                    FindChunksInSphere(load_targets[i].center, load_targets[i].radius, required_chunks);
-
-                std::vector<glm::ivec3> to_load, to_unload;
-                
-                {
-                    std::lock_guard<std::mutex> world_ptr_guard(world_mutex);
-                    
-                    if(world != nullptr)
-                    {
-                        to_load.reserve(required_chunks.size());
-                        to_unload.reserve(required_chunks.size());
-
-                        for(auto& chunk : world->GetChunks())
-                        {
-                            if(required_chunks.find(chunk.GetCoordinates()) == required_chunks.end())
-                                to_unload.emplace_back(chunk.GetCoordinates());
-                            else required_chunks.erase(chunk.GetCoordinates());
-                        }
-
-                        for(const glm::ivec3& chunk_coords : required_chunks)
-                            to_load.emplace_back(chunk_coords);
-
-                        auto closest_to_target = [&](const glm::ivec3& x, const glm::ivec3& y)
-                        {
-                            return glm::distance2(glm::vec3(x), glm::vec3(load_targets.front().center)) < glm::distance2(glm::vec3(y), glm::vec3(load_targets.front().center));
-                        };
-
-                        std::sort(to_load.begin(), to_load.end(), closest_to_target);
-                        std::sort(to_unload.begin(), to_unload.end(), closest_to_target);
-
-                        int i = 0, j = 0;
-                        while(i < to_load.size() && j < to_unload.size())
-                        {
-                            std::lock_guard<std::mutex> world_guard(world->GetMutex());
-                            
-                            world->UnloadChunk(to_unload[j++]);
-                            Chunk& chunk = world->LoadChunk(to_load[i++]);
-                        
-                            world->GetChunkGenerator()->GenerateChunk(chunk, chunk.GetCoordinates());
-                            chunk.BuildGeometry();
-
-                            if(exit)
-                                break;
-                        }
-
-                        while(i < to_load.size())
-                        {
-                            std::lock_guard<std::mutex> world_guard(world->GetMutex());
-                            
-                            Chunk& chunk = world->LoadChunk(to_load[i++]);
-                            world->GetChunkGenerator()->GenerateChunk(chunk, chunk.GetCoordinates());
-                            chunk.BuildGeometry();
-                            
-                            if(exit)
-                                break;
-                        }
-
-                        while(j < to_unload.size())
-                        {
-                            std::lock_guard<std::mutex> world_guard(world->GetMutex());
-
-                            world->UnloadChunk(to_unload[j++]);
-
-                            if(exit)
-                                break;
-                        }
-                    }
-                }
-            }
+            RunLoadPass();
 
             float world_load_end_time = glfwGetTime();
             float world_load_time = world_load_end_time - world_load_start_time;
@@ -723,7 +715,7 @@ namespace Game
             float sleep_time = (world_load_time < 1.0f ? 1.0f - world_load_time : 0.0f);
 
             if(sleep_time != 0.0f)
-                std::this_thread::sleep_for(std::chrono::microseconds((long long) (sleep_time * 1'000'000.0f)));
+                ;//std::this_thread::sleep_for(std::chrono::microseconds((long long) (sleep_time * 1'000'000.0f)));
 
             count++;
 
@@ -735,6 +727,37 @@ namespace Game
                 count = 0;
             }
         }
+    }
+
+    void WorldLoadThread::RunLoadPass()
+    {
+        std::lock_guard<std::mutex> world_ptr_guard(world_mutex);
+
+        if(world != nullptr)
+        {
+            std::vector<LoadTarget> load_targets;
+            FindLoadTargets(load_targets);
+
+            std::unordered_set<glm::ivec3> required_chunks;
+            for(int i = 0; i < load_targets.size(); i++)
+                FindChunksInSphere(load_targets[i].center, load_targets[i].radius, required_chunks);
+            FilterChunks(required_chunks);
+
+            std::vector<glm::ivec3> to_load, to_unload;
+            FindChunksToLoadOrUnload(required_chunks, to_load, to_unload);
+
+            SortChunks(to_load, load_targets.front().center);
+            SortChunks(to_unload, load_targets.front().center);
+            
+            LoadAndUnloadChunks(to_load, to_unload);
+        }
+    }
+
+    void WorldLoadThread::FindLoadTargets(std::vector<LoadTarget>& targets)
+    {
+        std::lock_guard<std::mutex> guard(players_mutex);
+        for(int i = 0; i < players.size(); i++)
+            targets.emplace_back(World::GlobalCoordinatesToChunkCoordinates(players[i]->GetTransform().Position()), players[i]->GetRenderDistance());
     }
 
     void WorldLoadThread::FindChunksInSphere(const glm::ivec3& center, float radius, std::unordered_set<glm::ivec3>& out)
@@ -758,6 +781,83 @@ namespace Game
                     out.emplace(next);
                 }
             }
+        }
+    }
+
+    void WorldLoadThread::FilterChunks(std::unordered_set<glm::ivec3>& chunks)
+    {
+        ChunkGenerator* generator = world->GetChunkGenerator();
+
+        for(auto it = chunks.begin(); it != chunks.end(); )
+            if(generator->IsEmpty(*it))
+                it = chunks.erase(it);
+            else it++;
+    }
+
+    void WorldLoadThread::FindChunksToLoadOrUnload(std::unordered_set<glm::ivec3>& required, std::vector<glm::ivec3>& to_load, std::vector<glm::ivec3>& to_unload)
+    {
+        to_load.reserve(required.size());
+        to_unload.reserve(required.size());
+
+        for(auto& chunk : world->GetChunks())
+        {
+            if(required.find(chunk.GetCoordinates()) == required.end())
+                to_unload.emplace_back(chunk.GetCoordinates());
+            else required.erase(chunk.GetCoordinates());
+        }
+
+        for(const glm::ivec3& chunk_coords : required)
+            to_load.emplace_back(chunk_coords);
+    }
+
+    void WorldLoadThread::SortChunks(std::vector<glm::ivec3>& chunks, const glm::ivec3& target)
+    {
+        auto closest_to_target = [&](const glm::ivec3& x, const glm::ivec3& y)
+        {
+            return glm::distance2(glm::vec3(x), glm::vec3(target)) < glm::distance2(glm::vec3(y), glm::vec3(target));
+        };
+
+        std::sort(chunks.begin(), chunks.end(), closest_to_target);
+    }
+
+    void WorldLoadThread::LoadAndUnloadChunks(const std::vector<glm::ivec3>& to_load, const std::vector<glm::ivec3>& to_unload)
+    {
+        std::size_t max_count = std::clamp((std::size_t) ((to_load.size() + to_unload.size()) * 0.5f), (std::size_t) 64, (std::size_t) 1024);
+        ChunkGenerator* generator = world->GetChunkGenerator();
+
+        std::size_t i = 0, j = 0, k = 0;
+        while(i < to_load.size() && j < to_unload.size() && (k += 2) < max_count)
+        {
+            std::lock_guard<std::mutex> world_guard(world->GetMutex());
+
+            Chunk& chunk = world->TransposeChunk(to_unload[j++], to_load[i]);
+            generator->GenerateChunk(chunk, to_load[i++]);
+            chunk.BuildGeometry();
+
+            if(exit)
+                break;
+        }
+
+        while(i < to_load.size() && k++ < max_count)
+        {
+            std::lock_guard<std::mutex> world_guard(world->GetMutex());
+
+            Chunk& chunk = world->LoadChunk(to_load[i]);
+            generator->GenerateChunk(chunk, to_load[i++]);
+            chunk.BuildGeometry();
+
+            if(exit)
+                break;
+        }
+
+        while(j < to_unload.size() && k++ < max_count)
+        {
+            std::lock_guard<std::mutex> world_guard(world->GetMutex());
+
+            world->UnloadChunk(to_unload[j++]);
+
+            if(exit)
+                break;
         }
     }
 };
