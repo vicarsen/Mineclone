@@ -627,6 +627,14 @@ namespace Game
                 chunk.PlaceBlock({ x, layer, z }, block);
     }
 
+    static void FillEmpty(Game::Chunk& chunk)
+    {
+        for(int x = 0; x < CHUNK_SIZE; x++)
+            for(int y = 0; y < CHUNK_SIZE; y++)
+                for(int z = 0; z < CHUNK_SIZE; z++)
+                    chunk.PlaceBlock({ x, y, z }, Game::VanillaBlocks::AIR_BLOCK);
+    }
+
     void SuperflatChunkGenerator::GenerateChunk(Game::Chunk& chunk, const glm::ivec3& coords)
     {
         if(coords.y == 0)
@@ -653,6 +661,95 @@ namespace Game
     bool SuperflatChunkGenerator::IsEmpty(const glm::ivec3& position)
     {
         return position.y != 0;
+    }
+
+    Perlin2DChunkGenerator::Perlin2DChunkGenerator(const glm::uvec2& size, float plains_height, float hills_height, float mountains_height) :
+        size(size), max_height(mountains_height)
+    {
+        heightmap.resize((CHUNK_SIZE * size.x) * (CHUNK_SIZE * size.y), 0.0f);
+        std::atomic<bool> flag = false;
+
+        Render::RenderThread& render_thread = Application::Get()->GetRenderThread();
+        render_thread.Execute([&](auto& context)
+        {
+            std::vector<float> mountains_heightmap(heightmap.size());
+            std::vector<float> hills_heightmap(heightmap.size());
+            std::vector<float> plains_heightmap(heightmap.size());
+
+            glm::uvec2 resolution = { CHUNK_SIZE, CHUNK_SIZE };
+            glm::uvec2 total_size = resolution * size;
+            
+            context.GeneratePerlin2DNoise(glm::uvec2(1, 1)   * resolution, total_size, plains_heightmap.data());
+            context.GeneratePerlin2DNoise(glm::uvec2(2, 2)   * resolution, total_size, hills_heightmap.data());
+            context.GeneratePerlin2DNoise(glm::uvec2(4, 4) * resolution, total_size, mountains_heightmap.data());
+
+            for(unsigned int i = 0; i < heightmap.size(); i++)
+                heightmap[i] = plains_heightmap[i] * plains_height + hills_heightmap[i] * (hills_height - plains_height) + mountains_heightmap[i] * (mountains_height - hills_height);
+
+            flag = true;
+        });
+
+        while(!flag);
+    }
+
+    void Perlin2DChunkGenerator::GenerateChunk(Game::Chunk& chunk, const glm::ivec3& position)
+    {
+        if(position.y * CHUNK_SIZE > max_height || position.y < 0)
+        {
+            FillEmpty(chunk);
+            return;
+        }
+
+        if(position.x < 0 || position.x >= size.x)
+        {
+            FillEmpty(chunk);
+            return;
+        }
+
+        if(position.z < 0 || position.z >= size.y)
+        {
+            FillEmpty(chunk);
+            return;
+        }
+
+        for(int x = 0; x < CHUNK_SIZE; x++)
+            for(int z = 0; z < CHUNK_SIZE; z++)
+            {
+                int gx = x + position.x * CHUNK_SIZE, gz = z + position.z * CHUNK_SIZE;
+                float height = heightmap[gx + gz * size.x * CHUNK_SIZE];
+
+                for(int y = 0; y < CHUNK_SIZE; y++)
+                {
+                    int gy = y + position.y * CHUNK_SIZE;
+                    if(gy <= height && gy + 1 > height)
+                        chunk.PlaceBlock({ x, y, z }, Game::VanillaBlocks::GRASS_BLOCK);
+                    else if(gy <= height)
+                        chunk.PlaceBlock({ x, y, z }, Game::VanillaBlocks::DIRT_BLOCK);
+                    else chunk.PlaceBlock({ x, y, z }, Game::VanillaBlocks::AIR_BLOCK);
+                }
+            }
+    }
+
+    bool Perlin2DChunkGenerator::IsEmpty(const glm::ivec3& position)
+    {
+        if(position.y * CHUNK_SIZE > max_height || position.y < 0)
+            return true;
+
+        if(position.x < 0 || position.x >= size.x)
+            return true;
+
+        if(position.z < 0 || position.z >= size.y)
+            return true;
+
+        bool empty = true;
+        for(int x = 0; x < CHUNK_SIZE && empty; x++)
+            for(int z = 0; z < CHUNK_SIZE; z++)
+            {
+                int gx = x + position.x * CHUNK_SIZE, gz = z + position.z * CHUNK_SIZE;
+                empty = (empty && heightmap[gx + gz * size.x * CHUNK_SIZE] < position.y * CHUNK_SIZE);
+            }
+
+        return empty;
     }
 
     WorldLoadThread::WorldLoadThread()

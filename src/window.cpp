@@ -23,6 +23,9 @@ namespace Window
             return;
         }
 
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+        glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 5);
+        
         window = glfwCreateWindow(width, height, title.c_str(), NULL, NULL);
         if(window == nullptr)
         {

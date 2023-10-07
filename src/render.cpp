@@ -4,6 +4,7 @@
 
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/random.hpp>
 
 #include <imgui.h>
 #include <imgui_impl_glfw.h>
@@ -447,7 +448,7 @@ namespace Render
             glGetShaderInfoLog(shader, log_length, &log_length, message.data());
             message.back() = '\0';
 
-            ERROR(Shaders, "Failed to compile shader! Error:\n%s\n", message.data());
+            ERROR(Shaders, "Failed to compile shader! Error:\n{}\n", message.data());
 
             return false;
         }
@@ -508,7 +509,7 @@ namespace Render
             glGetProgramInfoLog(program, log_length, &log_length, message.data());
             message.back() = '\0';
 
-            ERROR(Shaders, "Failed to link program! Error:\n%s\n", message.data());
+            ERROR(Shaders, "Failed to link program! Error:\n{}\n", message.data());
             return false;
         }
 
@@ -621,11 +622,39 @@ namespace Render
         case TextureFormat::R8: return GL_R8;
         case TextureFormat::R32: return GL_R32F;
         case TextureFormat::RGB8: return GL_RGB8;
+        case TextureFormat::RGB32: return GL_RGB32F;
         case TextureFormat::RGBA8: return GL_RGBA8;
+        case TextureFormat::RGBA32: return GL_RGBA32F;
         }
     }
 
-    static unsigned int TextureFormatTypeToGLFormat(TextureFormatType format)
+    static unsigned int TextureFormatToGLFormatType(TextureFormat format)
+    {
+        switch(format)
+        {
+        case TextureFormat::R8:
+        case TextureFormat::R32: return GL_RED;
+        case TextureFormat::RGB8:
+        case TextureFormat::RGB32: return GL_RGB;
+        case TextureFormat::RGBA8:
+        case TextureFormat::RGBA32: return GL_RGBA;
+        }
+    }
+
+    static unsigned int TextureFormatToGLType(TextureFormat format)
+    {
+        switch(format)
+        {
+        case TextureFormat::R8:
+        case TextureFormat::RGB8:
+        case TextureFormat::RGBA8: return GL_UNSIGNED_BYTE;
+        case TextureFormat::R32:
+        case TextureFormat::RGB32:
+        case TextureFormat::RGBA32: return GL_FLOAT;
+        }
+    }
+
+    static unsigned int TextureFormatTypeToGLFormatType(TextureFormatType format)
     {
         switch(format)
         {
@@ -690,19 +719,24 @@ namespace Render
 
     void Texture2D::SetData(const unsigned char* data, unsigned int level, TextureFormatType _format)
     {
-        unsigned int format = TextureFormatTypeToGLFormat(_format);
+        unsigned int format = TextureFormatTypeToGLFormatType(_format);
         glTextureSubImage2D(texture, level, 0, 0, width >> level, height >> level, format, GL_UNSIGNED_BYTE, data);
     }
 
     void Texture2D::SetData(const unsigned char* data, unsigned int level, TextureFormatType _format, unsigned int x, unsigned int y, unsigned int width, unsigned int height)
     {
-        unsigned int format = TextureFormatTypeToGLFormat(_format);
+        unsigned int format = TextureFormatTypeToGLFormatType(_format);
         glTextureSubImage2D(texture, level, x >> level, y >> level, width >> level, height >> level,format, GL_UNSIGNED_BYTE, data);
     }
 
     void Texture2D::CopyData(const Texture2D& other, unsigned int srcLevel, unsigned int srcX, unsigned int srcY, unsigned int dstLevel, unsigned int dstX, unsigned int dstY, unsigned int width, unsigned int height)
     {
         glCopyImageSubData(other.texture, GL_TEXTURE_2D, srcLevel, srcX >> srcLevel, srcY >> srcLevel, 0, texture, GL_TEXTURE_2D, dstLevel, dstX >> dstLevel, dstY >> dstLevel, 0, width >> srcLevel, height >> srcLevel, 1);
+    }
+
+    void Texture2D::GetData(unsigned int level, TextureFormat format, unsigned int size, void* out)
+    {
+        glGetTextureImage(texture, level, TextureFormatToGLFormatType(format), TextureFormatToGLType(format), size, out);
     }
 
     void Texture2D::GenerateMipmaps()
@@ -788,16 +822,23 @@ namespace Render
     Perlin2DGenerator::Perlin2DGenerator() :
         gradients_x(0), gradients_y(0)
     {
-        gradient_buffer.emplace(GL_STATIC_READ);
+        gradient_buffer.emplace(GL_STATIC_DRAW);
 
         std::string compute_src = Files::ReadFile(PATH("shaders/compute/perlin2D.glsl"));
         shader.emplace(compute_src.c_str());
+
+        gradients_index = shader->GetShaderStorageBlockIndex("gradients");
+        resolution_location = shader->GetUniformLocation("resolution");
+        gradients_dimensions_location = shader->GetUniformLocation("gradients_dimensions");
+
+        ERROR(LogTemp, "Gradients: {}", gradients_dimensions_location);
+        ERROR(LogTemp, "Resolution: {}", resolution_location);
+        ERROR(LogTemp, "Gradients index: {}", gradients_index);
     }
 
     Perlin2DGenerator::Perlin2DGenerator(Perlin2DGenerator&& other) :
-        gradients_x(other.gradients_x), gradients_y(other.gradients_y), gradient_buffer(std::move(other.gradient_buffer)), shader(std::move(other.shader))
+        gradients_x(other.gradients_x), gradients_y(other.gradients_y), gradient_buffer(std::move(other.gradient_buffer)), shader(std::move(other.shader)), texture(std::move(other.texture)), gradients_index(other.gradients_index), resolution_location(other.resolution_location), gradients_dimensions_location(other.gradients_dimensions_location)
     {
-        gradients_index = shader->GetShaderStorageBlockIndex("gradients");
     }
 
     Perlin2DGenerator::~Perlin2DGenerator()
@@ -812,29 +853,35 @@ namespace Render
         gradients_y = other.gradients_y;
         gradient_buffer = std::move(other.gradient_buffer);
         shader = std::move(other.shader);
+        texture = std::move(other.texture);
+        gradients_index = other.gradients_index;
+        resolution_location = other.resolution_location;
+        gradients_dimensions_location = other.gradients_dimensions_location;
         return *this;
     }
 
-    void Perlin2DGenerator::SetGradients(unsigned int x, unsigned int y, const glm::vec2* gradients)
+    void Perlin2DGenerator::SetGradients(unsigned int x, unsigned int y, const Perlin2DGradient* gradients)
     {
         gradients_x = x; gradients_y = y;
-        gradient_buffer->SetData(gradients_x * gradients_y * sizeof(glm::vec2), gradients);
+        gradient_buffer->SetData(gradients_x * gradients_y * sizeof(Perlin2DGradient), gradients);
     }
 
-    void Perlin2DGenerator::Generate(unsigned int width, unsigned int height, float* out)
+    void Perlin2DGenerator::Generate(unsigned int width, unsigned int height)
     {
-        Texture2D texture(1, TextureFormat::R32, (gradients_x - 1) * width, (gradients_y - 1) * height);
+        texture = std::move(Texture2D(1, TextureFormat::R32, (gradients_x - 1) * width, (gradients_y - 1) * height));
 
         shader->Bind();
-        shader->BindShaderStorageBlock(gradients_index, 1);
-        gradient_buffer->BindBase(GL_SHADER_STORAGE_BLOCK, 1);
-        texture.BindImage(0, 0, GL_WRITE_ONLY);
+        shader->BindShaderStorageBlock(gradients_index, 0);
+        gradient_buffer->BindBase(GL_SHADER_STORAGE_BUFFER, 0);
+        texture->BindImage(0, 0, GL_WRITE_ONLY);
+        glUniform2i(resolution_location, width, height);
+        glUniform2i(gradients_dimensions_location, gradients_x, gradients_y);
 
-        glDispatchCompute((unsigned int) (texture.GetWidth() / 32), (unsigned int) (texture.GetHeight() / 32), 1);
+        glDispatchCompute((unsigned int) (texture->GetWidth() / 8), (unsigned int) (texture->GetHeight() / 8), 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-        texture.UnbindImage(0);
-        gradient_buffer->UnbindBase(GL_SHADER_STORAGE_BLOCK, 1);
+        texture->UnbindImage(0);
+        gradient_buffer->UnbindBase(GL_SHADER_STORAGE_BUFFER, 0);
         shader->UnbindShaderStorageBlock(gradients_index);
         shader->Unbind();
     }
@@ -1232,6 +1279,45 @@ namespace Render
         ImGui::End();
     }
 
+    ImGuiPerlin2DNoiseVisualizerWindow::ImGuiPerlin2DNoiseVisualizerWindow() :
+        generator(), resolution(4)
+    {
+        Generate();
+    }
+
+    ImGuiPerlin2DNoiseVisualizerWindow::~ImGuiPerlin2DNoiseVisualizerWindow()
+    {
+    }
+
+    void ImGuiPerlin2DNoiseVisualizerWindow::Draw(bool* opened)
+    {
+        Texture2D& texture = generator.GetTexture();
+
+        ImGui::Begin("Perlin 2D Noise", opened);
+        
+        ImGui::Image((void*)(intptr_t) texture.GetInternalTexture(), ImVec2(texture.GetWidth(), texture.GetHeight()));
+        
+        if(ImGui::Button("Generate"))
+            Generate();
+
+        ImGui::SliderInt("Resolution", &resolution, 1, 64);
+
+        ImGui::End();
+    }
+
+    void ImGuiPerlin2DNoiseVisualizerWindow::Generate()
+    {
+        int subwidth = resolution * 8, subheight = resolution * 8;
+        int width = 512 / subwidth + 1, height = 512 / subheight + 1;
+        std::vector<Perlin2DGradient> gradients(width * height);
+
+        for(int i = 0; i < gradients.size(); i++)
+            gradients[i].gradient = glm::circularRand(1.0f);
+
+        generator.SetGradients(width, height, gradients.data());
+        generator.Generate(subwidth, subheight);
+    }
+
     ImGuiRenderer::ImGuiRenderer(GLFWwindow* _window) :
         window(_window)
     {
@@ -1406,6 +1492,20 @@ namespace Render
                 window_queue[idx] = window_queue.back();
             window_queue.pop_back();
         }
+
+        void RenderContext::GeneratePerlin2DNoise(const glm::uvec2& resolution, const glm::uvec2& output_size, float* out)
+        {
+            glm::uvec2 gradients_size = output_size / resolution + glm::uvec2(1, 1);
+            std::vector<Perlin2DGradient> gradients(gradients_size.x * gradients_size.y);
+            for(unsigned int i = 0; i < gradients.size(); i++)
+                gradients[i].gradient = glm::circularRand(1.0f);
+
+            perlin2D_generator->SetGradients(gradients_size.x, gradients_size.y, gradients.data());
+            perlin2D_generator->Generate(resolution.x, resolution.y);
+
+            Texture2D& texture = perlin2D_generator->GetTexture();
+            texture.GetData(0, TextureFormat::R32, output_size.x * output_size.y * 4, out);
+        }
     };
 
     RenderThread::RenderThread(GLFWwindow* window)
@@ -1459,6 +1559,7 @@ namespace Render
     void RenderThread::Run(GLFWwindow* window)
     {
         renderer.emplace(window);
+        render_context.perlin2D_generator.emplace();
 
         InitViewport(window);
         InitImGuiWindows();
@@ -1530,6 +1631,10 @@ namespace Render
         imgui_block_texture_atlas_window = std::make_shared<ImGuiTextureWindow>("Block Texture Atlas", renderer->GetChunkRenderer().GetAtlas().GetTexture());
         imgui_block_texture_atlas_window->SetOpened(false);
         render_context.AddWindowToRenderQueue(imgui_block_texture_atlas_window);
+
+        imgui_perlin2D_noise_visualizer_window = std::make_shared<ImGuiPerlin2DNoiseVisualizerWindow>();
+        imgui_perlin2D_noise_visualizer_window->SetOpened(false);
+        render_context.AddWindowToRenderQueue(imgui_perlin2D_noise_visualizer_window);
     }
 
     void RenderThread::ProcessCommands()

@@ -44,7 +44,7 @@ Application::Application()
     world_load_thread = std::make_shared<Game::WorldLoadThread>();
     world_load_thread->AddPlayer(player);
 
-    std::unique_ptr<Game::ChunkGenerator> generator = std::make_unique<Game::SuperflatChunkGenerator>();
+    std::unique_ptr<Game::ChunkGenerator> generator = std::make_unique<Game::Perlin2DChunkGenerator>(glm::uvec2{ 128, 128 }, 4, 32, 128);
     world = std::make_shared<Game::World>(generator);
     world_load_thread->SetWorld(world);
 }

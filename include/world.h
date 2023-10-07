@@ -72,6 +72,21 @@ namespace Game
          virtual bool IsEmpty(const glm::ivec3& position) override;
     };
 
+    class Perlin2DChunkGenerator : public ChunkGenerator
+    {
+    public:
+        Perlin2DChunkGenerator(const glm::uvec2& size, float plains_height, float hills_height, float mountains_height);
+        ~Perlin2DChunkGenerator() = default;
+
+        virtual void GenerateChunk(Game::Chunk& chunk, const glm::ivec3& chunk_coordinates) override;
+        virtual bool IsEmpty(const glm::ivec3& position) override;
+
+    private:
+        std::vector<float> heightmap;
+        glm::uvec2 size;
+        float max_height;
+    };
+
     class World
     {
     public:

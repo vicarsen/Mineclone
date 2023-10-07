@@ -256,7 +256,7 @@ namespace Render
     enum class TextureStyle { PIXELATED, SMOOTH };
 
     enum class TextureFormatType { RED, RGB, RGBA };
-    enum class TextureFormat { R8, R32, RGB8, RGBA8 };
+    enum class TextureFormat { R8, R32, RGB8, RGB32, RGBA8, RGBA32 };
 
     class Texture2D
     {
@@ -276,6 +276,7 @@ namespace Render
         void SetData(const unsigned char* data, unsigned int level, TextureFormatType format, unsigned int x, unsigned int y, unsigned int width, unsigned int height);
         
         void CopyData(const Texture2D& other, unsigned int src_level, unsigned int src_x, unsigned int src_y, unsigned int dst_level, unsigned int dst_x, unsigned int dst_y, unsigned int width, unsigned int height);
+        void GetData(unsigned int level, TextureFormat format, unsigned int size, void* out);
 
         void GenerateMipmaps();
 
@@ -332,6 +333,11 @@ namespace Render
         unsigned int width, height, size;
     };
 
+    struct Perlin2DGradient
+    {
+        glm::vec2 gradient;
+    };
+
     class Perlin2DGenerator
     {
     public:
@@ -344,16 +350,20 @@ namespace Render
         Perlin2DGenerator& operator=(Perlin2DGenerator&& other);
         Perlin2DGenerator& operator=(const Perlin2DGenerator& other) = delete;
 
-        void SetGradients(unsigned int x, unsigned int y, const glm::vec2* gradients);
-        void Generate(unsigned int width, unsigned int height, float* out);
+        void SetGradients(unsigned int x, unsigned int y, const Perlin2DGradient* gradients);
+        void Generate(unsigned int width, unsigned int height);
+
+        inline Texture2D& GetTexture() { return texture.value(); }
 
     private:
         unsigned int gradients_x, gradients_y;
         
         std::optional<Buffer> gradient_buffer;
         std::optional<ComputeShader> shader;
+        std::optional<Texture2D> texture;
 
         unsigned int gradients_index;
+        int resolution_location, gradients_dimensions_location;
     };
 
 
@@ -377,22 +387,26 @@ namespace Render
         virtual void Draw(bool* opened) override;
     };
 
-    class Perlin2DNoiseVisualizerWindow : public ImGuiWindow
+    class ImGuiPerlin2DNoiseVisualizerWindow : public ImGuiWindow
     {
     public:
-        Perlin2DNoiseVisualizerWindow();
-        Perlin2DNoiseVisualizerWindow(Perlin2DNoiseVisualizerWindow&& other) = delete;
-        Perlin2DNoiseVisualizerWindow(const Perlin2DNoiseVisualizerWindow& other) = delete;
+        ImGuiPerlin2DNoiseVisualizerWindow();
+        ImGuiPerlin2DNoiseVisualizerWindow(ImGuiPerlin2DNoiseVisualizerWindow&& other) = delete;
+        ImGuiPerlin2DNoiseVisualizerWindow(const ImGuiPerlin2DNoiseVisualizerWindow& other) = delete;
 
-        ~Perlin2DNoiseVisualizerWindow();
+        ~ImGuiPerlin2DNoiseVisualizerWindow();
 
-        Perlin2DNoiseVisualizerWindow& operator=(Perlin2DNoiseVisualizerWindow&& other) = delete;
-        Perlin2DNoiseVisualizerWindow& operator=(const Perlin2DNoiseVisualizerWindow& other) = delete;
+        ImGuiPerlin2DNoiseVisualizerWindow& operator=(ImGuiPerlin2DNoiseVisualizerWindow&& other) = delete;
+        ImGuiPerlin2DNoiseVisualizerWindow& operator=(const ImGuiPerlin2DNoiseVisualizerWindow& other) = delete;
 
         virtual void Draw(bool* opened) override;
+
+    private:
+        void Generate();
     
     private:
         Perlin2DGenerator generator;
+        int resolution;
     };
 
     class ImGuiRenderer
@@ -574,6 +588,8 @@ namespace Render
             void AddWindowToRenderQueue(const std::shared_ptr<ImGuiWindow>& window);
             void RemoveWindowFromRenderQueue(const std::shared_ptr<ImGuiWindow>& window);
 
+            void GeneratePerlin2DNoise(const glm::uvec2& resolution, const glm::uvec2& output_size, float* out);
+
         private:
             void InternalRemoveChunkFromRenderQueue(std::size_t idx);
             void InternalRemoveWindowFromRenderQueue(std::size_t idx);
@@ -584,6 +600,8 @@ namespace Render
             std::unordered_map<ChunkMeshHandle, std::size_t> in_render_queue;
 
             std::vector<std::weak_ptr<ImGuiWindow>> window_queue;
+
+            std::optional<Perlin2DGenerator> perlin2D_generator;
 
             friend class ::Render::RenderThread;
         };
@@ -652,6 +670,7 @@ namespace Render
 
         std::shared_ptr<ImGuiDemoWindow> imgui_demo_window;
         std::shared_ptr<ImGuiTextureWindow> imgui_block_texture_atlas_window;
+        std::shared_ptr<ImGuiPerlin2DNoiseVisualizerWindow> imgui_perlin2D_noise_visualizer_window;
         mutable std::mutex chunk_render_mutex;
 
         std::shared_ptr<Game::Player> player;
