@@ -8,6 +8,7 @@ add_subdirectory(./vendor/glfw)
 add_subdirectory(./vendor/glm)
 add_subdirectory(./vendor/spdlog)
 add_subdirectory(./vendor/imgui)
+add_subdirectory(./vendor/optick)
 
 project(Mineclone)
 
@@ -50,5 +51,12 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     glm::glm
     spdlog
     ImGui
+    OptickCore
+)
+
+target_compile_definitions(${PROJECT_NAME} PUBLIC
+    USE_OPTICK=1
+    OPTICK_ENABLE_TRACING=1
+    OPTICK_ENABLE_GPU=0
 )
 

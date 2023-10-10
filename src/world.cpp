@@ -13,6 +13,8 @@
 #include <unordered_set>
 #include <queue>
 
+#include <optick.h>
+
 DEFINE_LOG_CATEGORY(Chunk, FILE_LOGGER(trace, LOGFILE("World/Chunk.txt")));
 DEFINE_LOG_CATEGORY(World, FILE_LOGGER(trace, LOGFILE("world/World.txt")));
 
@@ -796,6 +798,8 @@ namespace Game
 
     void WorldLoadThread::Run()
     {
+        OPTICK_THREAD("World Loader Thread");
+
         initialized = true;
 
         float last_time = glfwGetTime();
@@ -852,6 +856,8 @@ namespace Game
 
     void WorldLoadThread::FindLoadTargets(std::vector<LoadTarget>& targets)
     {
+        OPTICK_EVENT();
+
         std::lock_guard<std::mutex> guard(players_mutex);
         for(int i = 0; i < players.size(); i++)
             targets.emplace_back(World::GlobalCoordinatesToChunkCoordinates(players[i]->GetTransform().Position()), players[i]->GetRenderDistance());
@@ -859,6 +865,8 @@ namespace Game
 
     void WorldLoadThread::FindChunksInSphere(const glm::ivec3& center, float radius, std::unordered_set<glm::ivec3>& out)
     {
+        OPTICK_EVENT();
+
         static const int d[] = { 0, 0, -1, 0, 0, 1, 0, 0 };
 
         std::queue<glm::ivec3> queue;
@@ -883,6 +891,8 @@ namespace Game
 
     void WorldLoadThread::FilterChunks(std::unordered_set<glm::ivec3>& chunks)
     {
+        OPTICK_EVENT();
+
         ChunkGenerator* generator = world->GetChunkGenerator();
 
         for(auto it = chunks.begin(); it != chunks.end(); )
@@ -893,6 +903,8 @@ namespace Game
 
     void WorldLoadThread::FindChunksToLoadOrUnload(std::unordered_set<glm::ivec3>& required, std::vector<glm::ivec3>& to_load, std::vector<glm::ivec3>& to_unload)
     {
+        OPTICK_EVENT();
+
         to_load.reserve(required.size());
         to_unload.reserve(required.size());
 
@@ -909,6 +921,8 @@ namespace Game
 
     void WorldLoadThread::SortChunks(std::vector<glm::ivec3>& chunks, const glm::ivec3& target)
     {
+        OPTICK_EVENT();
+
         auto closest_to_target = [&](const glm::ivec3& x, const glm::ivec3& y)
         {
             return glm::distance2(glm::vec3(x), glm::vec3(target)) < glm::distance2(glm::vec3(y), glm::vec3(target));
@@ -919,6 +933,8 @@ namespace Game
 
     void WorldLoadThread::LoadAndUnloadChunks(const std::vector<glm::ivec3>& to_load, const std::vector<glm::ivec3>& to_unload)
     {
+        OPTICK_EVENT();
+
         std::size_t max_count = std::clamp((std::size_t) ((to_load.size() + to_unload.size()) * 0.5f), (std::size_t) 64, (std::size_t) 1024);
         ChunkGenerator* generator = world->GetChunkGenerator();
 
