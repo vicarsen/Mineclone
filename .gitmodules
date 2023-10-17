@@ -11,4 +11,3 @@
 	path = vendor/imgui
 	url = https://github.com/vicarsen/imgui.git
     branch = docking
-
