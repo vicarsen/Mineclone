@@ -1,4 +1,6 @@
 #include "render.h"
+#include "gui/render.h"
+#include "format/render.h"
 
 #include <glad/gl.h>
 
@@ -10,17 +12,23 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 
+#include <implot.h>
+
 #include <vector>
 #include <cassert>
 
-#include "glm.fmt.h"
-#include "blocks.fmt.h"
+#include "format/glm.h"
+#include "format/blocks.h"
 
+#include "gui/aabb.h"
+#include "gui/blocks.h"
+
+#include "profiler.h"
 #include "files.h"
 #include "window.h"
 #include "stb_image.h"
-#include "mathematics.h"
 
+#include "mathematics.h"
 #include "aabb.h"
 #include "frustum.h"
 
@@ -625,6 +633,7 @@ namespace Render
         case TextureFormat::RGB32: return GL_RGB32F;
         case TextureFormat::RGBA8: return GL_RGBA8;
         case TextureFormat::RGBA32: return GL_RGBA32F;
+        default: return GL_NONE;
         }
     }
 
@@ -638,6 +647,7 @@ namespace Render
         case TextureFormat::RGB32: return GL_RGB;
         case TextureFormat::RGBA8:
         case TextureFormat::RGBA32: return GL_RGBA;
+        default: return GL_NONE;
         }
     }
 
@@ -651,6 +661,7 @@ namespace Render
         case TextureFormat::R32:
         case TextureFormat::RGB32:
         case TextureFormat::RGBA32: return GL_FLOAT;
+        default: return GL_NONE;
         }
     }
 
@@ -661,6 +672,7 @@ namespace Render
         case TextureFormatType::RED: return GL_RED;
         case TextureFormatType::RGB: return GL_RGB;
         case TextureFormatType::RGBA: return GL_RGBA;
+        default: return GL_NONE;
         }
     }
 
@@ -819,69 +831,78 @@ namespace Render
         return dimensions;
     }
 
-    Perlin2DGenerator::Perlin2DGenerator() :
-        gradients_x(0), gradients_y(0)
+    unsigned int Perlin2DGenerator::instance_count = 0;
+
+    std::optional<ComputeShader> Perlin2DGenerator::shader = std::nullopt;
+    unsigned int Perlin2DGenerator::gradients_index = 0;
+    int Perlin2DGenerator::resolution_location = -1;
+    int Perlin2DGenerator::gradients_dimensions_location = -1;
+
+    Perlin2DGenerator::Perlin2DGenerator(unsigned int width, unsigned int height) :
+        resolution{ 8, 8 }, gradient_buffer(GL_STATIC_DRAW), texture(1, TextureFormat::R32, width, height)
     {
-        gradient_buffer.emplace(GL_STATIC_DRAW);
+        if(instance_count++ == 0)
+        {
+            std::string compute_src = Files::ReadFile(PATH("shaders/compute/perlin2D.glsl"));
+            shader.emplace(compute_src.c_str());
 
-        std::string compute_src = Files::ReadFile(PATH("shaders/compute/perlin2D.glsl"));
-        shader.emplace(compute_src.c_str());
+            gradients_index = shader->GetShaderStorageBlockIndex("gradients");
+            resolution_location = shader->GetUniformLocation("resolution");
+            gradients_dimensions_location = shader->GetUniformLocation("gradients_dimensions");
 
-        gradients_index = shader->GetShaderStorageBlockIndex("gradients");
-        resolution_location = shader->GetUniformLocation("resolution");
-        gradients_dimensions_location = shader->GetUniformLocation("gradients_dimensions");
-
-        ERROR(LogTemp, "Gradients: {}", gradients_dimensions_location);
-        ERROR(LogTemp, "Resolution: {}", resolution_location);
-        ERROR(LogTemp, "Gradients index: {}", gradients_index);
+            ERROR(LogTemp, "Gradients: {}", gradients_dimensions_location);
+            ERROR(LogTemp, "Resolution: {}", resolution_location);
+            ERROR(LogTemp, "Gradients index: {}", gradients_index);
+        }
     }
 
     Perlin2DGenerator::Perlin2DGenerator(Perlin2DGenerator&& other) :
-        gradients_x(other.gradients_x), gradients_y(other.gradients_y), gradient_buffer(std::move(other.gradient_buffer)), shader(std::move(other.shader)), texture(std::move(other.texture)), gradients_index(other.gradients_index), resolution_location(other.resolution_location), gradients_dimensions_location(other.gradients_dimensions_location)
+        resolution(other.resolution), gradient_buffer(std::move(other.gradient_buffer)), texture(std::move(other.texture))
     {
+        instance_count++;
     }
 
     Perlin2DGenerator::~Perlin2DGenerator()
     {
-        shader.reset();
-        gradient_buffer.reset();
+        if(--instance_count == 0)
+            shader.reset();
     }
 
     Perlin2DGenerator& Perlin2DGenerator::operator=(Perlin2DGenerator&& other)
     {
-        gradients_x = other.gradients_x;
-        gradients_y = other.gradients_y;
+        resolution = other.resolution;
         gradient_buffer = std::move(other.gradient_buffer);
-        shader = std::move(other.shader);
         texture = std::move(other.texture);
-        gradients_index = other.gradients_index;
-        resolution_location = other.resolution_location;
-        gradients_dimensions_location = other.gradients_dimensions_location;
         return *this;
     }
 
-    void Perlin2DGenerator::SetGradients(unsigned int x, unsigned int y, const Perlin2DGradient* gradients)
+    void Perlin2DGenerator::Generate(Texture2D& texture, const glm::uvec2& resolution)
     {
-        gradients_x = x; gradients_y = y;
-        gradient_buffer->SetData(gradients_x * gradients_y * sizeof(Perlin2DGradient), gradients);
-    }
+        unsigned int width = texture.GetWidth(), height = texture.GetHeight();
+        unsigned int gradients_x = width / resolution.x + 1, gradients_y = height / resolution.y + 1;
 
-    void Perlin2DGenerator::Generate(unsigned int width, unsigned int height)
-    {
-        texture = std::move(Texture2D(1, TextureFormat::R32, (gradients_x - 1) * width, (gradients_y - 1) * height));
+        std::vector<Perlin2DGradient> gradients(gradients_x * gradients_y);
+        for(int i = 0; i < gradients.size(); i++)
+            gradients[i] = { .gradient = glm::circularRand(1.0f) };
+
+        INFO(LogTemp, "Texture: {} x {}", width, height);
+        INFO(LogTemp, "Gradients: {} x {}", gradients_x, gradients_y);
+        INFO(LogTemp, "Resolution: {} x {}", resolution.x, resolution.y);
+
+        gradient_buffer.SetData(gradients.size() * sizeof(Perlin2DGradient), gradients.data());
 
         shader->Bind();
         shader->BindShaderStorageBlock(gradients_index, 0);
-        gradient_buffer->BindBase(GL_SHADER_STORAGE_BUFFER, 0);
-        texture->BindImage(0, 0, GL_WRITE_ONLY);
-        glUniform2i(resolution_location, width, height);
+        gradient_buffer.BindBase(GL_SHADER_STORAGE_BUFFER, 0);
+        texture.BindImage(0, 0, GL_WRITE_ONLY);
+        glUniform2i(resolution_location, resolution.x, resolution.y);
         glUniform2i(gradients_dimensions_location, gradients_x, gradients_y);
 
-        glDispatchCompute((unsigned int) (texture->GetWidth() / 8), (unsigned int) (texture->GetHeight() / 8), 1);
+        glDispatchCompute((unsigned int) (width / 8), (unsigned int) (height / 8), 1);
         glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | GL_SHADER_IMAGE_ACCESS_BARRIER_BIT);
 
-        texture->UnbindImage(0);
-        gradient_buffer->UnbindBase(GL_SHADER_STORAGE_BUFFER, 0);
+        texture.UnbindImage(0);
+        gradient_buffer.UnbindBase(GL_SHADER_STORAGE_BUFFER, 0);
         shader->UnbindShaderStorageBlock(gradients_index);
         shader->Unbind();
     }
@@ -1251,83 +1272,18 @@ namespace Render
         return texture;
     }
 
-    void ImGuiWindow::Render()
-    {
-        bool is_opened = opened;
-        if(is_opened)
-        {
-            Draw(&is_opened);
-            if(!is_opened)
-                opened = false;
-        }
-    }
-
-    void ImGuiDemoWindow::Draw(bool* opened)
-    {
-        ImGui::ShowDemoWindow(opened);
-    }
-
-    ImGuiTextureWindow::ImGuiTextureWindow(const char* name, const Texture2D& texture) :
-        name(name), texture(texture.GetInternalTexture()), width(texture.GetWidth()), height(texture.GetHeight())
-    {
-    }
-
-    void ImGuiTextureWindow::Draw(bool* opened)
-    {
-        ImGui::Begin(name.c_str(), opened);
-        ImGui::Image((void*)(intptr_t) texture, ImVec2(width, height));
-        ImGui::End();
-    }
-
-    ImGuiPerlin2DNoiseVisualizerWindow::ImGuiPerlin2DNoiseVisualizerWindow() :
-        generator(), resolution(4)
-    {
-        Generate();
-    }
-
-    ImGuiPerlin2DNoiseVisualizerWindow::~ImGuiPerlin2DNoiseVisualizerWindow()
-    {
-    }
-
-    void ImGuiPerlin2DNoiseVisualizerWindow::Draw(bool* opened)
-    {
-        Texture2D& texture = generator.GetTexture();
-
-        ImGui::Begin("Perlin 2D Noise", opened);
-        
-        ImGui::Image((void*)(intptr_t) texture.GetInternalTexture(), ImVec2(texture.GetWidth(), texture.GetHeight()));
-        
-        if(ImGui::Button("Generate"))
-            Generate();
-
-        ImGui::SliderInt("Resolution", &resolution, 1, 64);
-
-        ImGui::End();
-    }
-
-    void ImGuiPerlin2DNoiseVisualizerWindow::Generate()
-    {
-        int subwidth = resolution * 8, subheight = resolution * 8;
-        int width = 512 / subwidth + 1, height = 512 / subheight + 1;
-        std::vector<Perlin2DGradient> gradients(width * height);
-
-        for(int i = 0; i < gradients.size(); i++)
-            gradients[i].gradient = glm::circularRand(1.0f);
-
-        generator.SetGradients(width, height, gradients.data());
-        generator.Generate(subwidth, subheight);
-    }
-
     ImGuiRenderer::ImGuiRenderer(GLFWwindow* _window) :
         window(_window)
     {
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
+        ImPlot::CreateContext();
         ImGuiIO& io = ImGui::GetIO();
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+        font = io.Fonts->AddFontFromFileTTF(PATH("fonts/Roboto.ttf"), 24.0f);
 
         ImGui_ImplGlfw_InitForOpenGL(window, true);
         ImGui_ImplOpenGL3_Init();
@@ -1337,6 +1293,7 @@ namespace Render
     {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
+        ImPlot::DestroyContext();
         ImGui::DestroyContext();
     }
 
@@ -1345,10 +1302,12 @@ namespace Render
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
+        ImGui::PushFont(font);
     }
     
     void ImGuiRenderer::End()
     {
+        ImGui::PopFont();
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
@@ -1454,27 +1413,6 @@ namespace Render
             InternalRemoveChunkFromRenderQueue(idx);
         }
 
-        void RenderContext::AddWindowToRenderQueue(const std::shared_ptr<ImGuiWindow>& window)
-        {
-            window_queue.emplace_back(window);
-        }
-
-        void RenderContext::RemoveWindowFromRenderQueue(const std::shared_ptr<ImGuiWindow>& window)
-        {
-            std::size_t i = 0;
-            while(i < window_queue.size())
-            {
-                auto cur = window_queue[i].lock();
-                if(cur == window)
-                {
-                    InternalRemoveWindowFromRenderQueue(i);
-                    break;
-                }
-
-                i++;
-            }
-        }
-
         void RenderContext::InternalRemoveChunkFromRenderQueue(std::size_t idx)
         {
             if(idx != render_queue.size() - 1)
@@ -1486,25 +1424,16 @@ namespace Render
             render_queue.pop_back();
         }
 
-        void RenderContext::InternalRemoveWindowFromRenderQueue(std::size_t idx)
-        {
-            if(idx != window_queue.size() - 1)
-                window_queue[idx] = window_queue.back();
-            window_queue.pop_back();
-        }
-
         void RenderContext::GeneratePerlin2DNoise(const glm::uvec2& resolution, const glm::uvec2& output_size, float* out)
         {
-            glm::uvec2 gradients_size = output_size / resolution + glm::uvec2(1, 1);
-            std::vector<Perlin2DGradient> gradients(gradients_size.x * gradients_size.y);
-            for(unsigned int i = 0; i < gradients.size(); i++)
-                gradients[i].gradient = glm::circularRand(1.0f);
+            Texture2D texture(1, TextureFormat::R32, output_size.x, output_size.y);
+            perlin2D_generator->Generate(texture, resolution);
+            texture.GetData(0, TextureFormat::R32, output_size.x * output_size.y * sizeof(float), out);
+        }
 
-            perlin2D_generator->SetGradients(gradients_size.x, gradients_size.y, gradients.data());
-            perlin2D_generator->Generate(resolution.x, resolution.y);
-
-            Texture2D& texture = perlin2D_generator->GetTexture();
-            texture.GetData(0, TextureFormat::R32, output_size.x * output_size.y * 4, out);
+        void RenderContext::GeneratePerlin2DNoise(const glm::uvec2& resolution, Texture2D& out)
+        {
+            perlin2D_generator->Generate(out, resolution);
         }
     };
 
@@ -1559,10 +1488,10 @@ namespace Render
     void RenderThread::Run(GLFWwindow* window)
     {
         renderer.emplace(window);
-        render_context.perlin2D_generator.emplace();
+        render_context.perlin2D_generator.emplace(512, 512);
 
         InitViewport(window);
-        InitImGuiWindows();
+        InitGUIWindows();
 
         initialized = true;
 
@@ -1570,6 +1499,8 @@ namespace Render
         int count = 0, chunks_rendered_total = 0;
         while(!exit)
         {
+            PROFILE_THREAD(RenderThread);
+
             float render_start_time = glfwGetTime();
 
             ProcessCommands();
@@ -1584,7 +1515,7 @@ namespace Render
             renderer->SetVPMatrix(vp_matrix);
 
             chunks_rendered_total += RenderChunks(frustum);
-            RenderImGui();
+            RenderGUI();
 
             renderer->End();
 
@@ -1599,16 +1530,22 @@ namespace Render
             count++;
 
             float time = glfwGetTime();
-            if(time - last_time >= 5.0f)
+            //if(time - last_time >= 2.0f)
             {
-                WARN(LogTemp, "Render avg: {} fps", count / (time - last_time));
-                WARN(LogTemp, "Chunks rendered avg: {} cpf", chunks_rendered_total * 1.0f / count);
+
+                ::GUI::Render::RenderDebugInfoEvent event;
+                event.fps = count / (time - last_time);
+                event.chunks_rendered = chunks_rendered_total;
+
+                Application::Get()->DispatchEvent(event);
+
                 last_time = time;
-                count = 0; chunks_rendered_total = 0;
+                count = 0; 
+                chunks_rendered_total = 0; 
             }
         }
 
-        DestroyImGuiWindows();
+        DestroyGUIWindows();
 
         renderer.reset();
     }
@@ -1622,19 +1559,18 @@ namespace Render
         viewport_changed = false;
     }
 
-    void RenderThread::InitImGuiWindows()
+    void RenderThread::InitGUIWindows()
     {
-        imgui_demo_window = std::make_shared<ImGuiDemoWindow>();
-        imgui_demo_window->SetOpened(false);
-        render_context.AddWindowToRenderQueue(imgui_demo_window);
-
-        imgui_block_texture_atlas_window = std::make_shared<ImGuiTextureWindow>("Block Texture Atlas", renderer->GetChunkRenderer().GetAtlas().GetTexture());
-        imgui_block_texture_atlas_window->SetOpened(false);
-        render_context.AddWindowToRenderQueue(imgui_block_texture_atlas_window);
-
-        imgui_perlin2D_noise_visualizer_window = std::make_shared<ImGuiPerlin2DNoiseVisualizerWindow>();
-        imgui_perlin2D_noise_visualizer_window->SetOpened(false);
-        render_context.AddWindowToRenderQueue(imgui_perlin2D_noise_visualizer_window);
+        ::GUI::WindowManager& window_manager = render_context.gui_window_manager.emplace();
+        window_manager.emplace<::GUI::DemoWindow>()->Close();
+        window_manager.emplace<::GUI::Plot::PlotDemoWindow>()->Close();
+        window_manager.emplace<::GUI::Profiler::ProfilerWindow>()->Close();
+        window_manager.emplace<::GUI::Render::RenderDemoWindow>(&render_context)->Close();
+        window_manager.emplace<::GUI::Game::BlocksDemoWindow>()->Open();
+        
+        auto debug_info_overlay = window_manager.emplace<::GUI::Render::DebugInfoOverlayWindow>();
+        debug_info_overlay->Open();
+        ::Application::Get()->RegisterHandler(debug_info_overlay);
     }
 
     void RenderThread::ProcessCommands()
@@ -1699,27 +1635,119 @@ namespace Render
         return frustum.IsAABBVisible(aabb);                    
     }
 
-    void RenderThread::RenderImGui()
+    void RenderThread::RenderGUI()
     {
         std::lock_guard<std::mutex> imgui_render_guard(imgui_render_mutex);
 
         ImGuiRenderer& imgui_renderer = renderer->GetImGuiRenderer();
         imgui_renderer.Begin();
-
-        for(std::size_t i = 0; i < render_context.window_queue.size(); )
-            if(auto window = render_context.window_queue[i].lock())
-            {
-                window->Render();
-                i++;
-            }
-            else render_context.InternalRemoveWindowFromRenderQueue(i);
-
+        render_context.gui_window_manager->Draw();
         imgui_renderer.End();
     }
 
-    void RenderThread::DestroyImGuiWindows()
+    void RenderThread::DestroyGUIWindows()
     {
-        imgui_demo_window.reset();
+        render_context.gui_window_manager.reset();
     }
+};
+
+namespace GUI
+{
+    namespace Render
+    {
+        RenderDemoWindow::RenderDemoWindow(::Render::RenderThread::RenderContext* render_context) :
+            Window("Render Demo Window"), render_context(render_context)
+        {}
+
+        void RenderDemoWindow::Draw()
+        {
+            static ::Math::AABB example_aabb;
+            static ::Render::Texture2D example_noise(1, ::Render::TextureFormat::R32, 512, 512);
+            static glm::ivec2 example_noise_resolution = { 4, 4 };
+
+            if(Begin())
+            {
+                InputAABB("AABB", example_aabb);
+
+                if(ImGui::TreeNode("Perlin 2D"))
+                {
+                    SliderInt2("Resolution", (int*) &example_noise_resolution, 1, 512);
+                    
+                    if(ImGui::Button("Generate"))
+                        render_context->GeneratePerlin2DNoise(example_noise_resolution, example_noise);
+
+                    Text("Noise");
+                    Image((void*) (intptr_t) example_noise.GetInternalTexture(), ImVec2(example_noise.GetWidth(), example_noise.GetHeight()));
+                
+                    ImGui::TreePop();
+                }
+
+                End();
+            }
+        }
+
+        DebugInfoOverlayWindow::DebugInfoOverlayWindow() :
+            Window("Debug Info Overlay")
+        {
+        }
+
+        void DebugInfoOverlayWindow::Draw()
+        {
+            static const float PADDING = 10.0f;
+            static const ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoDocking | ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoMove;
+
+            const ImGuiViewport* viewport = GetMainViewport();
+            ImVec2 work_position = viewport->WorkPos;
+
+            ImVec2 window_position, window_position_pivot;
+            window_position.x = work_position.x + PADDING;
+            window_position.y = work_position.y + PADDING;
+            window_position_pivot.x = 0;
+            window_position_pivot.y = 0;
+            SetNextWindowPos(window_position, ImGuiCond_Always, window_position_pivot);
+            SetNextWindowViewport(viewport->ID);
+            SetNextWindowBgAlpha(0.35f);
+            if(Begin(window_flags))
+            {
+                if(TreeNode("Game Info"))
+                {
+                    Text("Game Ticks Per Second: %.0f", game_fps);
+                    Text("Player Position: %.2f %.2f %.2f", player_position.x, player_position.y, player_position.z);
+                    TreePop();
+                }
+                if(TreeNode("World Generation Info"))
+                {
+                    Text("World Generation Ticks Per Second: %.0f", world_generation_fps);
+                    Text("Chunks Generated: %d", chunks_generated);
+                    TreePop();
+                }
+                if(TreeNode("Render Info"))
+                {
+                    Text("Render Ticks Per Second: %.0f", render_fps);
+                    Text("Chunks Rendered: %d", chunks_rendered);
+                    TreePop();
+                }
+            }
+            End();
+        }
+
+        void DebugInfoOverlayWindow::Handle(const GameDebugInfoEvent& event)
+        {
+            game_fps = event.fps;
+            player_position = event.player_position;
+        }
+
+        void DebugInfoOverlayWindow::Handle(const WorldGenerationInfoEvent& event)
+        {
+            world_generation_fps = event.fps;
+            chunks_generated = event.chunks_generated;
+        }
+
+        void DebugInfoOverlayWindow::Handle(const RenderDebugInfoEvent& event)
+        {
+            render_fps = event.fps;
+            chunks_rendered = event.chunks_rendered;
+        }
+    };
 };
 

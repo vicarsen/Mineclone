@@ -44,6 +44,12 @@ public:
         event_dispatcher->Dispatch<EventType>(std::forward<Args>(args)...);
     }
 
+    template<typename Handler>
+    void RegisterHandler(const Handler& handler)
+    {
+        event_dispatcher->RegisterHandler(handler);
+    }
+
     inline static Application* Get() noexcept { return instance; }
 
 private:

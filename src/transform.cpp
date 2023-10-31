@@ -2,7 +2,7 @@
 
 #include <glm/gtx/transform.hpp>
 
-namespace Game
+namespace Math
 {
     Transform::Transform() :
         position(0.0f, 0.0f, 0.0f), rotation(glm::vec3{ 0.0f, 0.0f, 0.0f }), scale(1.0f, 1.0f, 1.0f)

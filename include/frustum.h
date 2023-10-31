@@ -10,7 +10,7 @@ namespace Math
     class Frustum
     {
     public:
-        enum Planes
+        enum class Plane
         {
             Left = 0,
             Right,
@@ -25,9 +25,13 @@ namespace Math
 
         bool IsAABBVisible(const AABB& aabb) const;
 
+        inline const glm::vec4& GetPlane(Plane plane) const noexcept { return planes[(int) plane]; }
+
     private:
         glm::vec4 planes[6];
         glm::vec3 corners[8];
     };
 };
+
+const char* ToString(::Math::Frustum::Plane plane);
 

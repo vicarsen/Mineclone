@@ -39,6 +39,6 @@ void main()
     const float color  = mix(color1, color2, smooth_t.y) * 0.5 + 0.5;
     //const float color = float(coords.x + coords.y * gradients_dimensions.x) / float(gradients_dimensions.x * gradients_dimensions.y);
 
-    imageStore(noise, tex_coords, vec4(color));
+    imageStore(noise, tex_coords, vec4(color, color, color, 1.0));
 }
 

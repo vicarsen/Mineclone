@@ -15,6 +15,7 @@
 #include "config.h"
 #include "logger.h"
 #include "events.h"
+#include "gui.h"
 
 #include "frustum.h"
 
@@ -341,7 +342,7 @@ namespace Render
     class Perlin2DGenerator
     {
     public:
-        Perlin2DGenerator();
+        Perlin2DGenerator(unsigned int width, unsigned int height);
         Perlin2DGenerator(Perlin2DGenerator&& other);
         Perlin2DGenerator(const Perlin2DGenerator& other) = delete;
 
@@ -350,63 +351,29 @@ namespace Render
         Perlin2DGenerator& operator=(Perlin2DGenerator&& other);
         Perlin2DGenerator& operator=(const Perlin2DGenerator& other) = delete;
 
-        void SetGradients(unsigned int x, unsigned int y, const Perlin2DGradient* gradients);
-        void Generate(unsigned int width, unsigned int height);
-
-        inline Texture2D& GetTexture() { return texture.value(); }
-
-    private:
-        unsigned int gradients_x, gradients_y;
+        void Generate(Texture2D& texture, const glm::uvec2& resolution);
         
-        std::optional<Buffer> gradient_buffer;
-        std::optional<ComputeShader> shader;
-        std::optional<Texture2D> texture;
+        inline void Generate() { Generate(texture, resolution); }
 
-        unsigned int gradients_index;
-        int resolution_location, gradients_dimensions_location;
-    };
+        inline void SetResolution(const glm::uvec2& resolution) noexcept { this->resolution = resolution; }
 
+        inline const glm::uvec2& GetResolution() const noexcept { return resolution; }
+        inline unsigned int GetWidth() const noexcept { return texture.GetWidth(); }
+        inline unsigned int GetHeight() const noexcept { return texture.GetHeight(); }
 
-    class ImGuiWindow
-    {
-    public:
-        virtual void Draw(bool* opened) = 0;
-
-        void Render();
-
-        inline bool IsOpened() const noexcept { return opened; }
-        inline void SetOpened(bool opened) noexcept { this->opened = opened; }
-
-    protected:
-        std::atomic<bool> opened = false;
-    };
-
-    class ImGuiDemoWindow : public ImGuiWindow
-    {
-    public:
-        virtual void Draw(bool* opened) override;
-    };
-
-    class ImGuiPerlin2DNoiseVisualizerWindow : public ImGuiWindow
-    {
-    public:
-        ImGuiPerlin2DNoiseVisualizerWindow();
-        ImGuiPerlin2DNoiseVisualizerWindow(ImGuiPerlin2DNoiseVisualizerWindow&& other) = delete;
-        ImGuiPerlin2DNoiseVisualizerWindow(const ImGuiPerlin2DNoiseVisualizerWindow& other) = delete;
-
-        ~ImGuiPerlin2DNoiseVisualizerWindow();
-
-        ImGuiPerlin2DNoiseVisualizerWindow& operator=(ImGuiPerlin2DNoiseVisualizerWindow&& other) = delete;
-        ImGuiPerlin2DNoiseVisualizerWindow& operator=(const ImGuiPerlin2DNoiseVisualizerWindow& other) = delete;
-
-        virtual void Draw(bool* opened) override;
+        inline Texture2D& GetTexture() noexcept { return texture; }
 
     private:
-        void Generate();
-    
-    private:
-        Perlin2DGenerator generator;
-        int resolution;
+        glm::uvec2 resolution;
+        
+        Buffer gradient_buffer;
+        Texture2D texture;
+
+        static unsigned int instance_count;
+
+        static std::optional<ComputeShader> shader;
+        static unsigned int gradients_index;
+        static int resolution_location, gradients_dimensions_location;
     };
 
     class ImGuiRenderer
@@ -426,6 +393,7 @@ namespace Render
 
     private:
         GLFWwindow* window;
+        ImFont* font;
     };
 
     class ChunkRenderer
@@ -487,19 +455,6 @@ namespace Render
 
         unsigned int active_pipeline;
         DrawMode draw_mode;
-    };
-
-    class ImGuiTextureWindow : public ImGuiWindow
-    {
-    public:
-        ImGuiTextureWindow(const char* name, const Texture2D& texture);
-
-        virtual void Draw(bool* opened) override;
-
-    private:
-        std::string name;
-        unsigned int texture;
-        unsigned int width, height;
     };
 
     class Renderer
@@ -585,23 +540,21 @@ namespace Render
             void RemoveChunkFromRenderQueue(const std::shared_ptr<ChunkMesh>& mesh);
             void RemoveChunkFromRenderQueue(ChunkMeshHandle handle);
 
-            void AddWindowToRenderQueue(const std::shared_ptr<ImGuiWindow>& window);
-            void RemoveWindowFromRenderQueue(const std::shared_ptr<ImGuiWindow>& window);
-
             void GeneratePerlin2DNoise(const glm::uvec2& resolution, const glm::uvec2& output_size, float* out);
+            void GeneratePerlin2DNoise(const glm::uvec2& resolution, Texture2D& out);
+
+            inline ::GUI::WindowManager& GetGUIWindowManager() { return gui_window_manager.value(); }
 
         private:
             void InternalRemoveChunkFromRenderQueue(std::size_t idx);
-            void InternalRemoveWindowFromRenderQueue(std::size_t idx);
 
         private:
             ChunkMeshPool chunk_mesh_pool;
             std::vector<std::pair<ChunkMeshHandle, std::weak_ptr<ChunkMesh>>> render_queue;
             std::unordered_map<ChunkMeshHandle, std::size_t> in_render_queue;
 
-            std::vector<std::weak_ptr<ImGuiWindow>> window_queue;
-
             std::optional<Perlin2DGenerator> perlin2D_generator;
+            std::optional<::GUI::WindowManager> gui_window_manager;
 
             friend class ::Render::RenderThread;
         };
@@ -644,7 +597,7 @@ namespace Render
         void Run(GLFWwindow* window);
 
         void InitViewport(GLFWwindow* window);
-        void InitImGuiWindows();
+        void InitGUIWindows();
 
         void ProcessCommands();
         void UpdateViewport();
@@ -652,9 +605,9 @@ namespace Render
         int RenderChunks(const Math::Frustum& frustum);
         bool IsChunkOnScreen(const std::shared_ptr<ChunkMesh>& mesh, const Math::Frustum& frustum);
 
-        void RenderImGui();
+        void RenderGUI();
 
-        void DestroyImGuiWindows();
+        void DestroyGUIWindows();
 
     private:
         std::thread thread;
@@ -667,10 +620,6 @@ namespace Render
 
         std::optional<Renderer> renderer;
         mutable std::mutex imgui_render_mutex;
-
-        std::shared_ptr<ImGuiDemoWindow> imgui_demo_window;
-        std::shared_ptr<ImGuiTextureWindow> imgui_block_texture_atlas_window;
-        std::shared_ptr<ImGuiPerlin2DNoiseVisualizerWindow> imgui_perlin2D_noise_visualizer_window;
         mutable std::mutex chunk_render_mutex;
 
         std::shared_ptr<Game::Player> player;

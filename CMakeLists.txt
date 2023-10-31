@@ -8,22 +8,26 @@ add_subdirectory(./vendor/glfw)
 add_subdirectory(./vendor/glm)
 add_subdirectory(./vendor/spdlog)
 add_subdirectory(./vendor/imgui)
-add_subdirectory(./vendor/optick)
+add_subdirectory(./vendor/implot)
 
 project(Mineclone)
 
 add_executable(${PROJECT_NAME}
     ./src/main.cpp
 
+    ./src/utils.cpp
     ./src/logger.cpp
     ./src/files.cpp
     ./src/mathematics.cpp
+    ./src/aabb.cpp
     ./src/frustum.cpp
 
     ./src/input.cpp
     ./src/window.cpp
     ./src/render.cpp
     ./src/profiler.cpp
+
+    ./src/gui.cpp
 
     ./src/stb_image.cpp
     ./src/transform.cpp
@@ -51,12 +55,6 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
     glm::glm
     spdlog
     ImGui
-    OptickCore
-)
-
-target_compile_definitions(${PROJECT_NAME} PUBLIC
-    USE_OPTICK=1
-    OPTICK_ENABLE_TRACING=1
-    OPTICK_ENABLE_GPU=0
+    ImPlot
 )
 

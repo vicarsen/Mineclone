@@ -9,7 +9,7 @@ DEFINE_LOG_CATEGORY(Player, FILE_LOGGER(trace, LOGFILE("Player.txt")));
 namespace Game
 {
     Player::Player(float _fov, float _aspect_ratio) :
-        transform(), projection(glm::perspective(_fov, _aspect_ratio, 0.1f, 1000.0f)), fov(_fov), aspect_ratio(_aspect_ratio), near(0.1f), far(1000.0f), render_distance(32)
+        transform(), projection(glm::perspective(_fov, _aspect_ratio, 0.1f, 1000.0f)), fov(_fov), aspect_ratio(_aspect_ratio), near(0.1f), far(1000.0f), render_distance(24)
     {
         TRACE(Player, "[{}:constructor] (#fov:{}) (#aspect_ratio:{}) <>", (unsigned long long) this, _fov, _aspect_ratio);
     }

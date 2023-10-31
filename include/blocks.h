@@ -85,6 +85,9 @@ namespace Game
             inline bool operator==(const BlockIterator& other) const noexcept { return block == other.block; }
             inline bool operator!=(const BlockIterator& other) const noexcept { return block != other.block; }
             
+            inline bool operator==(BlockID other) const noexcept { return block == other; }
+            inline bool operator!=(BlockID other) const noexcept { return block != other; }
+
             inline operator BlockID() const noexcept { return block; }
 
             BlockData& Get() const;
@@ -126,6 +129,9 @@ namespace Game
             inline bool operator==(const ConstBlockIterator& other) const noexcept { return block == other.block; }
             inline bool operator!=(const ConstBlockIterator& other) const noexcept { return block != other.block; }
 
+            inline bool operator==(BlockID other) const noexcept { return block == other; }
+            inline bool operator!=(BlockID other) const noexcept { return block != other; }
+
             inline operator BlockID() const noexcept { return block; }
 
         private:
@@ -165,6 +171,9 @@ namespace Game
             inline bool operator==(const ReverseBlockIterator& other) const noexcept { return block == other.block; }
             inline bool operator!=(const ReverseBlockIterator& other) const noexcept { return block != other.block; }
 
+            inline bool operator==(BlockID other) const noexcept { return block == other; }
+            inline bool operator!=(BlockID other) const noexcept { return block != other; }
+
             inline operator BlockID() const noexcept { return block; }
 
         private:
@@ -203,6 +212,9 @@ namespace Game
 
             inline bool operator==(const ConstReverseBlockIterator& other) const noexcept { return block == other.block; }
             inline bool operator!=(const ConstReverseBlockIterator& other) const noexcept { return block != other.block; }
+
+            inline bool operator==(BlockID other) const noexcept { return block == other; }
+            inline bool operator!=(BlockID other) const noexcept { return block != other; }
 
             inline operator BlockID() const noexcept { return block; }
 
@@ -263,4 +275,6 @@ namespace Game
         extern BlockID GRASS_BLOCK;
     };
 };
+
+const char* ToString(::Game::Direction direction);
 

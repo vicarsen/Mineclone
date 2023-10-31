@@ -1,6 +1,7 @@
 #pragma once
 
 #include <tuple>
+#include <vector>
 
 namespace std_ext
 {
@@ -36,3 +37,4 @@ namespace std_ext
     {
     };
 };
+

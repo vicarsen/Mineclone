@@ -5,7 +5,7 @@
 
 #include "events.h"
 
-#include <optick.h>
+#include "gui/render.h"
 
 DEFINE_LOG_CATEGORY(Application, CONSOLE_LOGGER(trace));
 
@@ -46,7 +46,7 @@ Application::Application()
     world_load_thread = std::make_shared<Game::WorldLoadThread>();
     world_load_thread->AddPlayer(player);
 
-    std::unique_ptr<Game::ChunkGenerator> generator = std::make_unique<Game::Perlin2DChunkGenerator>(glm::uvec2{ 128, 128 }, 4, 32, 128);
+    std::unique_ptr<Game::ChunkGenerator> generator = std::make_unique<Game::Perlin2DChunkGenerator>(glm::uvec2{ 256, 256 }, 8, 32, 128);
     world = std::make_shared<Game::World>(generator);
     world_load_thread->SetWorld(world);
 }
@@ -81,9 +81,6 @@ void ApplicationHandler::Handle(const Input::KeyEvent& key_event)
 
 void Application::Run()
 {
-    OPTICK_THREAD("MainThread");
-    OPTICK_START_CAPTURE();
-
     const float player_speed = 5.0f, player_warp_speed = 200.0f, player_sensitivity = 0.1f;
     float player_pitch = 0.0f;
     float player_yaw = 0.0f;
@@ -94,7 +91,9 @@ void Application::Run()
 
     while(!window->ShouldClose())
     {
-        OPTICK_FRAME("Main Thread Frame");
+        PROFILE_THREAD(MainThread);
+
+        float update_start_time = glfwGetTime();
 
         input_handler->Reset();
         glfwPollEvents();
@@ -102,13 +101,21 @@ void Application::Run()
 
         event_dispatcher->ProcessEvents();
 
+        float update_end_time = glfwGetTime();
+        float update_time = update_end_time - update_start_time;
+
+        float sleep_time = (update_time < 1.0f / 144.0f ? 1.0f / 144.0f - update_time : 0.0f);
+
+        if(sleep_time != 0.0f)
+            std::this_thread::sleep_for(std::chrono::microseconds((long long) (sleep_time * 1'000'000.0f)));
+
         float time = glfwGetTime();
         delta_time = time - last_time;
         last_time = time;
 
         glm::vec2 movement = input_handler->GetCursorMovement() * player_sensitivity;
         player_pitch = std::clamp(player_pitch - movement.y, -89.0f, 89.0f);
-        player_yaw = player_yaw - movement.x;
+        player_yaw = glm::mod(player_yaw - movement.x, 360.0f);
 
         player->GetTransform().Rotation() = glm::quat({ glm::radians(player_pitch), glm::radians(player_yaw), 0.0f });
 
@@ -116,6 +123,7 @@ void Application::Run()
         forward.y = 0.0f; forward = glm::normalize(forward);
 
         glm::vec3 right = player->GetTransform().Right();
+        right = glm::normalize(right);
 
         glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 
@@ -143,18 +151,17 @@ void Application::Run()
         count++;
 
         time = glfwGetTime();
-        if(time - last_print >= 5.0f)
+        //if(time - last_print >= 2.0f)
         {
-            WARN(LogTemp, "Update avg: {} fps", count / (time - last_print));
+            ::GUI::Render::GameDebugInfoEvent event;
+            event.fps = count / (time - last_print);
+            event.player_position = player->GetTransform().Position();
 
-            ERROR(LogTemp, "Player height: {}", player->GetTransform().Position().y);
+            DispatchEvent(event);
 
             last_print = time;
             count = 0;
         }
     }
-
-    OPTICK_STOP_CAPTURE();
-    OPTICK_SAVE_CAPTURE("profiler_dump");
 }
 

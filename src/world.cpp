@@ -1,19 +1,19 @@
 #include "world.h"
 #include "GLFW/glfw3.h"
 
-#include "glm.fmt.h"
-#include "render.fmt.h"
-#include "blocks.fmt.h"
+#include "format/glm.h"
+#include "format/render.h"
+#include "format/blocks.h"
 
 #include "mathematics.h"
 #include "files.h"
 
 #include "application.h"
 
+#include "gui/render.h"
+
 #include <unordered_set>
 #include <queue>
-
-#include <optick.h>
 
 DEFINE_LOG_CATEGORY(Chunk, FILE_LOGGER(trace, LOGFILE("World/Chunk.txt")));
 DEFINE_LOG_CATEGORY(World, FILE_LOGGER(trace, LOGFILE("world/World.txt")));
@@ -681,9 +681,9 @@ namespace Game
             glm::uvec2 resolution = { CHUNK_SIZE, CHUNK_SIZE };
             glm::uvec2 total_size = resolution * size;
             
-            context.GeneratePerlin2DNoise(glm::uvec2(1, 1)   * resolution, total_size, plains_heightmap.data());
-            context.GeneratePerlin2DNoise(glm::uvec2(2, 2)   * resolution, total_size, hills_heightmap.data());
-            context.GeneratePerlin2DNoise(glm::uvec2(4, 4) * resolution, total_size, mountains_heightmap.data());
+            context.GeneratePerlin2DNoise(resolution / glm::uvec2(2, 2), total_size, plains_heightmap.data());
+            context.GeneratePerlin2DNoise(resolution * glm::uvec2(2, 2), total_size, hills_heightmap.data());
+            context.GeneratePerlin2DNoise(resolution * glm::uvec2(4, 4), total_size, mountains_heightmap.data());
 
             for(unsigned int i = 0; i < heightmap.size(); i++)
                 heightmap[i] = plains_heightmap[i] * plains_height + hills_heightmap[i] * (hills_height - plains_height) + mountains_heightmap[i] * (mountains_height - hills_height);
@@ -798,17 +798,17 @@ namespace Game
 
     void WorldLoadThread::Run()
     {
-        OPTICK_THREAD("World Loader Thread");
-
         initialized = true;
 
         float last_time = glfwGetTime();
-        int count = 0;
+        int count = 0, chunks_generated_total = 0;
         while(!exit)
         {
-            float world_load_start_time = glfwGetTime();
+            PROFILE_THREAD(WorldLoader);
 
-            RunLoadPass();
+            float world_load_start_time = glfwGetTime();
+            
+            chunks_generated_total += RunLoadPass();
 
             float world_load_end_time = glfwGetTime();
             float world_load_time = world_load_end_time - world_load_start_time;
@@ -821,16 +821,21 @@ namespace Game
             count++;
 
             float time = glfwGetTime();
-            if(time - last_time >= 5.0f)
+            //if(time - last_time >= 2.0f)
             {
-                WARN(LogTemp, "World load avg: {} fps", count / (time - last_time));
+                ::GUI::Render::WorldGenerationInfoEvent event;
+                event.fps = count / (time - last_time);
+                event.chunks_generated = chunks_generated_total;
+                Application::Get()->DispatchEvent(event);
+
                 last_time = time;
                 count = 0;
+                chunks_generated_total = 0;
             }
         }
     }
 
-    void WorldLoadThread::RunLoadPass()
+    int WorldLoadThread::RunLoadPass()
     {
         std::lock_guard<std::mutex> world_ptr_guard(world_mutex);
 
@@ -850,14 +855,13 @@ namespace Game
             SortChunks(to_load, load_targets.front().center);
             SortChunks(to_unload, load_targets.front().center);
             
-            LoadAndUnloadChunks(to_load, to_unload);
+            return LoadAndUnloadChunks(to_load, to_unload);
         }
+        else return 0;
     }
 
     void WorldLoadThread::FindLoadTargets(std::vector<LoadTarget>& targets)
     {
-        OPTICK_EVENT();
-
         std::lock_guard<std::mutex> guard(players_mutex);
         for(int i = 0; i < players.size(); i++)
             targets.emplace_back(World::GlobalCoordinatesToChunkCoordinates(players[i]->GetTransform().Position()), players[i]->GetRenderDistance());
@@ -865,8 +869,6 @@ namespace Game
 
     void WorldLoadThread::FindChunksInSphere(const glm::ivec3& center, float radius, std::unordered_set<glm::ivec3>& out)
     {
-        OPTICK_EVENT();
-
         static const int d[] = { 0, 0, -1, 0, 0, 1, 0, 0 };
 
         std::queue<glm::ivec3> queue;
@@ -891,8 +893,6 @@ namespace Game
 
     void WorldLoadThread::FilterChunks(std::unordered_set<glm::ivec3>& chunks)
     {
-        OPTICK_EVENT();
-
         ChunkGenerator* generator = world->GetChunkGenerator();
 
         for(auto it = chunks.begin(); it != chunks.end(); )
@@ -903,8 +903,6 @@ namespace Game
 
     void WorldLoadThread::FindChunksToLoadOrUnload(std::unordered_set<glm::ivec3>& required, std::vector<glm::ivec3>& to_load, std::vector<glm::ivec3>& to_unload)
     {
-        OPTICK_EVENT();
-
         to_load.reserve(required.size());
         to_unload.reserve(required.size());
 
@@ -921,8 +919,6 @@ namespace Game
 
     void WorldLoadThread::SortChunks(std::vector<glm::ivec3>& chunks, const glm::ivec3& target)
     {
-        OPTICK_EVENT();
-
         auto closest_to_target = [&](const glm::ivec3& x, const glm::ivec3& y)
         {
             return glm::distance2(glm::vec3(x), glm::vec3(target)) < glm::distance2(glm::vec3(y), glm::vec3(target));
@@ -931,16 +927,31 @@ namespace Game
         std::sort(chunks.begin(), chunks.end(), closest_to_target);
     }
 
-    void WorldLoadThread::LoadAndUnloadChunks(const std::vector<glm::ivec3>& to_load, const std::vector<glm::ivec3>& to_unload)
+    int WorldLoadThread::LoadAndUnloadChunks(const std::vector<glm::ivec3>& to_load, const std::vector<glm::ivec3>& to_unload)
     {
-        OPTICK_EVENT();
-
-        std::size_t max_count = std::clamp((std::size_t) ((to_load.size() + to_unload.size()) * 0.5f), (std::size_t) 64, (std::size_t) 1024);
+        std::size_t step = 64, threshold = CHUNK_SIZE * 8;
+        std::size_t max_count = std::clamp((std::size_t) ((to_load.size() + to_unload.size())), (std::size_t) 64, (std::size_t) 16384);
         ChunkGenerator* generator = world->GetChunkGenerator();
 
+        glm::vec3 old_position = { 0, 0, 0 };
+        {
+            std::lock_guard<std::mutex> guard(players_mutex);
+            if(players.front() != nullptr)
+                old_position = players.front()->GetTransform().Position();
+        }
+
+        int total = 0;
         std::size_t i = 0, j = 0, k = 0;
         while(i < to_load.size() && j < to_unload.size() && (k += 2) < max_count)
         {
+            if(total % step == 0)
+            {
+                std::lock_guard<std::mutex> guard(players_mutex);
+                if(players.front() != nullptr && glm::distance(old_position, players.front()->GetTransform().Position()) >= players.front()->GetRenderDistance() * CHUNK_SIZE / 8)
+                    k = max_count;
+            }
+
+            total++;
             std::lock_guard<std::mutex> world_guard(world->GetMutex());
 
             Chunk& chunk = world->TransposeChunk(to_unload[j++], to_load[i]);
@@ -953,6 +964,14 @@ namespace Game
 
         while(i < to_load.size() && k++ < max_count)
         {
+            if(total % step == 0)
+            {
+                std::lock_guard<std::mutex> guard(players_mutex);
+                if(players.front() != nullptr && glm::distance(old_position, players.front()->GetTransform().Position()) >= players.front()->GetRenderDistance() * CHUNK_SIZE / 8)
+                    k = max_count;
+            }
+
+            total++;
             std::lock_guard<std::mutex> world_guard(world->GetMutex());
 
             Chunk& chunk = world->LoadChunk(to_load[i]);
@@ -965,6 +984,14 @@ namespace Game
 
         while(j < to_unload.size() && k++ < max_count)
         {
+            if(total % step == 0)
+            {
+                std::lock_guard<std::mutex> guard(players_mutex);
+                if(players.front() != nullptr && glm::distance(old_position, players.front()->GetTransform().Position()) >= players.front()->GetRenderDistance() * CHUNK_SIZE / 8)
+                    k = max_count;
+            }
+
+            total++;
             std::lock_guard<std::mutex> world_guard(world->GetMutex());
 
             world->UnloadChunk(to_unload[j++]);
@@ -972,6 +999,8 @@ namespace Game
             if(exit)
                 break;
         }
+
+        return total;
     }
 };
 

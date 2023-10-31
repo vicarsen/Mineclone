@@ -11,3 +11,6 @@
 	path = vendor/imgui
 	url = https://github.com/vicarsen/imgui.git
     branch = docking
+[submodule "vendor/implot"]
+	path = vendor/implot
+	url = https://github.com/vicarsen/implot.git

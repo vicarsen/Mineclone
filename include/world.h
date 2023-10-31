@@ -36,8 +36,8 @@ namespace Game
         inline bool IsGeometryBuilt() const noexcept { return geometry_built; }
         inline void SetGeometryBuilt(bool built) noexcept { geometry_built = built; }
 
-        inline Transform& GetTransform() noexcept { return transform; }
-        inline const Transform& GetTransform() const noexcept { return transform; }
+        inline ::Math::Transform& GetTransform() noexcept { return transform; }
+        inline const ::Math::Transform& GetTransform() const noexcept { return transform; }
 
         inline void SetCoordinates(const glm::ivec3& coords) noexcept { this->coords = coords; }
         inline const glm::ivec3& GetCoordinates() const noexcept { return coords; }
@@ -49,7 +49,7 @@ namespace Game
     private:
         BlockID blocks[CHUNK_SIZE][CHUNK_SIZE][CHUNK_SIZE];
 
-        Game::Transform transform;
+        ::Math::Transform transform;
         glm::ivec3 coords;
 
         Render::ChunkMeshHandle mesh_handle;
@@ -153,14 +153,14 @@ namespace Game
     private:
         void Run();
 
-        void RunLoadPass();
+        int RunLoadPass();
 
         void FindLoadTargets(std::vector<LoadTarget>& targets);
         void FindChunksInSphere(const glm::ivec3& center, float radius, std::unordered_set<glm::ivec3>& out);
         void FilterChunks(std::unordered_set<glm::ivec3>& chunks);
         void FindChunksToLoadOrUnload(std::unordered_set<glm::ivec3>& required, std::vector<glm::ivec3>& to_load, std::vector<glm::ivec3>& to_unload);
         void SortChunks(std::vector<glm::ivec3>& chunks, const glm::ivec3& target);
-        void LoadAndUnloadChunks(const std::vector<glm::ivec3>& to_load, const std::vector<glm::ivec3>& to_unload);
+        int LoadAndUnloadChunks(const std::vector<glm::ivec3>& to_load, const std::vector<glm::ivec3>& to_unload);
 
     private:
         std::thread thread;

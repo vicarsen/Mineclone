@@ -1,57 +1,59 @@
 #include "frustum.h"
+#include "gui/frustum.h"
+#include "format/frustum.h"
 
 namespace Math
 {
-    std::size_t IndexOf(Frustum::Planes a, Frustum::Planes b)
+    static inline std::size_t IndexOf(Frustum::Plane a, Frustum::Plane b)
     {
-        return a * (9 - a) / 2 + b - 1;
+        return (int) a * (9 - (int) a) / 2 + (int) b - 1;
     }
 
-    glm::vec3 Intersection(Frustum::Planes a, Frustum::Planes b, Frustum::Planes c, const glm::vec4* planes, const glm::vec3* crosses)
+    static inline glm::vec3 Intersection(Frustum::Plane a, Frustum::Plane b, Frustum::Plane c, const glm::vec4* planes, const glm::vec3* crosses)
     {
-        float d = glm::dot(glm::vec3(planes[a]), crosses[IndexOf(b, c)]);
+        float d = glm::dot(glm::vec3(planes[(int) a]), crosses[IndexOf(b, c)]);
         glm::vec3 res = glm::mat3(crosses[IndexOf(b, c)], -crosses[IndexOf(a, c)], crosses[IndexOf(a, b)]) *
-                        glm::vec3(planes[a].w, planes[b].w, planes[c].w);
+                        glm::vec3(planes[(int) a].w, planes[(int) b].w, planes[(int) c].w);
         return res * (-1.0f / d);
     }
 
     Frustum::Frustum(const glm::mat4& matrix)
     {
         glm::mat4 mat = glm::transpose(matrix);
-        planes[Left]   = mat[3] + mat[0];
-        planes[Right]  = mat[3] - mat[0];
-        planes[Bottom] = mat[3] + mat[1];
-        planes[Top]    = mat[3] - mat[1];
-        planes[Near]   = mat[3] + mat[2];
-        planes[Far]    = mat[3] - mat[2];
+        planes[(int) Plane::Left]   = mat[3] + mat[0];
+        planes[(int) Plane::Right]  = mat[3] - mat[0];
+        planes[(int) Plane::Bottom] = mat[3] + mat[1];
+        planes[(int) Plane::Top]    = mat[3] - mat[1];
+        planes[(int) Plane::Near]   = mat[3] + mat[2];
+        planes[(int) Plane::Far]    = mat[3] - mat[2];
 
         glm::vec3 crosses[] =
         {
-            glm::cross(glm::vec3(planes[Left]), glm::vec3(planes[Right])),
-            glm::cross(glm::vec3(planes[Left]), glm::vec3(planes[Bottom])),
-            glm::cross(glm::vec3(planes[Left]), glm::vec3(planes[Top])),
-            glm::cross(glm::vec3(planes[Left]), glm::vec3(planes[Near])),
-            glm::cross(glm::vec3(planes[Left]), glm::vec3(planes[Far])),
-            glm::cross(glm::vec3(planes[Right]), glm::vec3(planes[Bottom])),
-            glm::cross(glm::vec3(planes[Right]), glm::vec3(planes[Top])),
-            glm::cross(glm::vec3(planes[Right]), glm::vec3(planes[Near])),
-            glm::cross(glm::vec3(planes[Right]), glm::vec3(planes[Far])),
-            glm::cross(glm::vec3(planes[Bottom]), glm::vec3(planes[Top])),
-            glm::cross(glm::vec3(planes[Bottom]), glm::vec3(planes[Near])),
-            glm::cross(glm::vec3(planes[Bottom]), glm::vec3(planes[Far])),
-            glm::cross(glm::vec3(planes[Top]), glm::vec3(planes[Near])),
-            glm::cross(glm::vec3(planes[Top]), glm::vec3(planes[Far])),
-            glm::cross(glm::vec3(planes[Near]), glm::vec3(planes[Far]))
+            glm::cross(glm::vec3(planes[(int) Plane::Left]), glm::vec3(planes[(int) Plane::Right])),
+            glm::cross(glm::vec3(planes[(int) Plane::Left]), glm::vec3(planes[(int) Plane::Bottom])),
+            glm::cross(glm::vec3(planes[(int) Plane::Left]), glm::vec3(planes[(int) Plane::Top])),
+            glm::cross(glm::vec3(planes[(int) Plane::Left]), glm::vec3(planes[(int) Plane::Near])),
+            glm::cross(glm::vec3(planes[(int) Plane::Left]), glm::vec3(planes[(int) Plane::Far])),
+            glm::cross(glm::vec3(planes[(int) Plane::Right]), glm::vec3(planes[(int) Plane::Bottom])),
+            glm::cross(glm::vec3(planes[(int) Plane::Right]), glm::vec3(planes[(int) Plane::Top])),
+            glm::cross(glm::vec3(planes[(int) Plane::Right]), glm::vec3(planes[(int) Plane::Near])),
+            glm::cross(glm::vec3(planes[(int) Plane::Right]), glm::vec3(planes[(int) Plane::Far])),
+            glm::cross(glm::vec3(planes[(int) Plane::Bottom]), glm::vec3(planes[(int) Plane::Top])),
+            glm::cross(glm::vec3(planes[(int) Plane::Bottom]), glm::vec3(planes[(int) Plane::Near])),
+            glm::cross(glm::vec3(planes[(int) Plane::Bottom]), glm::vec3(planes[(int) Plane::Far])),
+            glm::cross(glm::vec3(planes[(int) Plane::Top]), glm::vec3(planes[(int) Plane::Near])),
+            glm::cross(glm::vec3(planes[(int) Plane::Top]), glm::vec3(planes[(int) Plane::Far])),
+            glm::cross(glm::vec3(planes[(int) Plane::Near]), glm::vec3(planes[(int) Plane::Far]))
         };
 
-        corners[0] = Intersection(Left, Bottom, Near, planes, crosses);
-        corners[1] = Intersection(Left, Top, Near, planes, crosses);
-        corners[2] = Intersection(Right, Bottom, Near, planes, crosses);
-        corners[3] = Intersection(Right, Top, Near, planes, crosses);
-        corners[4] = Intersection(Left, Bottom, Far, planes, crosses);
-        corners[5] = Intersection(Left, Top, Far, planes, crosses);
-        corners[6] = Intersection(Right, Bottom, Far, planes, crosses);
-        corners[7] = Intersection(Right, Top, Far, planes, crosses);
+        corners[0] = Intersection(Plane::Left, Plane::Bottom, Plane::Near, planes, crosses);
+        corners[1] = Intersection(Plane::Left, Plane::Top, Plane::Near, planes, crosses);
+        corners[2] = Intersection(Plane::Right, Plane::Bottom, Plane::Near, planes, crosses);
+        corners[3] = Intersection(Plane::Right, Plane::Top, Plane::Near, planes, crosses);
+        corners[4] = Intersection(Plane::Left, Plane::Bottom, Plane::Far, planes, crosses);
+        corners[5] = Intersection(Plane::Left, Plane::Top, Plane::Far, planes, crosses);
+        corners[6] = Intersection(Plane::Right, Plane::Bottom, Plane::Far, planes, crosses);
+        corners[7] = Intersection(Plane::Right, Plane::Top, Plane::Far, planes, crosses);
     }
 
     bool Frustum::IsAABBVisible(const AABB& aabb) const
@@ -82,4 +84,50 @@ namespace Math
         return true;
     }
 };
+
+namespace GUI
+{
+    namespace Math
+    {
+        void InputFrustum(const char* name, ::Math::Frustum& frustum)
+        {
+            if(TreeNode(name))
+            {
+
+                TreePop();
+            }
+        }
+        
+        void InputFrustumPlane(const char* name, ::Math::Frustum::Plane& plane)
+        {
+            if(BeginCombo(name, ToString(plane)))
+            {
+                for(int i = 0; i < 6; i++)
+                {
+                    bool is_selected = (plane == (::Math::Frustum::Plane) i);
+                    if(Selectable(ToString((::Math::Frustum::Plane) i), is_selected))
+                        is_selected = true;
+                    if(is_selected)
+                        SetItemDefaultFocus();
+                }
+
+                EndCombo();
+            }
+        }
+    };
+};
+
+const char* ToString(::Math::Frustum::Plane plane)
+{
+    switch(plane)
+    {
+    case ::Math::Frustum::Plane::Left: return "Left";
+    case ::Math::Frustum::Plane::Right: return "Right";
+    case ::Math::Frustum::Plane::Bottom: return "Bottom";
+    case ::Math::Frustum::Plane::Top: return "Top";
+    case ::Math::Frustum::Plane::Near: return "Near";
+    case ::Math::Frustum::Plane::Far: return "Far";
+    default: return "";
+    }
+}
 

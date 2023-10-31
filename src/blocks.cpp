@@ -1,4 +1,6 @@
 #include "blocks.h"
+#include "gui/blocks.h"
+#include "format/blocks.h"
 
 #include "files.h"
 
@@ -100,4 +102,77 @@ namespace Game
         })();
     };
 };
+
+namespace GUI
+{
+    namespace Game
+    {
+        void DirectionCombo(const char* name, ::Game::Direction& direction)
+        {
+            if(BeginCombo(name, ToString(direction)))
+            {
+                for(int i = 0; i < 6; i++)
+                {
+                    ::Game::Direction current = (::Game::Direction) i;
+                    bool is_selected = (current == direction);
+                    if(Selectable(ToString(current), is_selected))
+                        direction = current;
+                    if(is_selected)
+                        SetItemDefaultFocus();
+                }
+
+                EndCombo();
+            }
+        }
+
+        void BlocksCombo(const char* name, ::Game::BlockID& block)
+        {
+            if(BeginCombo(name, ::Game::BlockRegistry::CFind(block)->name.c_str()))
+            {
+                for(auto it = ::Game::BlockRegistry::CBegin(); it != ::Game::BlockRegistry::CEnd(); it++)
+                {
+                    bool is_selected = (it == block);
+                    if(Selectable(it->name.c_str(), is_selected))
+                        block = it;
+                    if(is_selected)
+                        SetItemDefaultFocus();
+                }
+
+                EndCombo();
+            }
+        }
+
+        BlocksDemoWindow::BlocksDemoWindow() :
+            Window("Blocks Demo Window")
+        {
+        }
+
+        void BlocksDemoWindow::Draw()
+        {
+            static ::Game::Direction direction = ::Game::Direction::UP;
+            static ::Game::BlockID block = ::Game::VanillaBlocks::AIR_BLOCK;
+
+            if(Begin())
+            {
+                DirectionCombo("Direction", direction);
+                BlocksCombo("Block", block);
+                End();
+            }
+        }
+    };
+};
+
+const char* ToString(::Game::Direction direction)
+{
+    switch(direction)
+    {
+    case ::Game::Direction::UP: return "UP";
+    case ::Game::Direction::DOWN: return "DOWN";
+    case ::Game::Direction::NORTH: return "NORTH";
+    case ::Game::Direction::SOUTH: return "SOUTH";
+    case ::Game::Direction::EAST: return "EAST";
+    case ::Game::Direction::WEST: return "WEST";
+    default: return "";
+    }
+}
 

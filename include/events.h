@@ -3,6 +3,7 @@
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <mutex>
 
 #include "std_ext.h"
 
@@ -46,18 +47,21 @@ namespace Events
         template<typename EventType>
         void Dispatch(const EventType& event)
         {
+            std::lock_guard<std::mutex> guard(mutex);
             Events<EventType>().events.push_back(event);
         }
 
         template<typename EventType, typename... Args>
         void Dispatch(Args&&... args)
         {
+            std::lock_guard<std::mutex> guard(mutex);
             Events<EventType>().events.emplace_back(std::forward<Args>(args)...);
         }
 
         template<typename EventType>
         void RegisterHandler(const std::shared_ptr<EventHandlerBase<EventType>>& handler)
         {
+            std::lock_guard<std::mutex> guard(mutex);
             Handlers<EventType>().handlers.emplace_back(handler);
         }
 
@@ -97,6 +101,8 @@ namespace Events
 
         void ProcessEvents()
         {
+            std::lock_guard<std::mutex> guard(mutex);
+
             for(auto&[type, event_arr] : events)
             {
                 auto it = handlers.find(type);
@@ -189,6 +195,7 @@ namespace Events
     private:
         std::unordered_map<std::size_t, std::shared_ptr<EventArrayBase>> events;
         std::unordered_map<std::size_t, std::shared_ptr<EventHandlerArrayBase>> handlers;
+        std::mutex mutex;
     };
 };
 
