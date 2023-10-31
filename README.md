@@ -22,3 +22,18 @@ Next, are the features that are planned for the near future:
 
 Note: these lists may change with time as I make progress. For certain "checkpoints" of my progress you can check the branches named after the date when the last commit was made.
 
+# Build
+## CMake
+The build system I am using is CMake and the easiest to build and run the project is using CMake.
+To build the project for yourself clone the repository (whatever branch you like) with the command:
+```bash
+git clone https://github.com/vicarsen/Mineclone.git
+```
+Then make sure to initialize the submodules by cd-ing into the cloned repository and running the command:
+```bash
+git submodule update --init
+```
+Then, you can proceed to build the project like any other CMake project.
+## Other build system
+The sources of the project are in the "./src" directory, and the include files in the "./include" directory. Make sure to link against all the libraries found in "./vendor". Make sure that the folder "./assets" is, relative to the executable, at "../assets".
+
