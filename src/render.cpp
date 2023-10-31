@@ -1565,8 +1565,8 @@ namespace Render
         window_manager.emplace<::GUI::DemoWindow>()->Close();
         window_manager.emplace<::GUI::Plot::PlotDemoWindow>()->Close();
         window_manager.emplace<::GUI::Profiler::ProfilerWindow>()->Close();
-        window_manager.emplace<::GUI::Render::RenderDemoWindow>(&render_context)->Close();
-        window_manager.emplace<::GUI::Game::BlocksDemoWindow>()->Open();
+        window_manager.emplace<::GUI::Render::RenderDemoWindow>(&render_context)->Open();
+        window_manager.emplace<::GUI::Game::BlocksDemoWindow>()->Close();
         
         auto debug_info_overlay = window_manager.emplace<::GUI::Render::DebugInfoOverlayWindow>();
         debug_info_overlay->Open();
@@ -1662,7 +1662,7 @@ namespace GUI
         void RenderDemoWindow::Draw()
         {
             static ::Math::AABB example_aabb;
-            static ::Render::Texture2D example_noise(1, ::Render::TextureFormat::R32, 512, 512);
+            static ::Render::Texture2D example_noise(1, ::Render::TextureFormat::RGBA32, 512, 512);
             static glm::ivec2 example_noise_resolution = { 4, 4 };
 
             if(Begin())
@@ -1671,7 +1671,7 @@ namespace GUI
 
                 if(ImGui::TreeNode("Perlin 2D"))
                 {
-                    SliderInt2("Resolution", (int*) &example_noise_resolution, 1, 512);
+                    SliderInt2("Resolution", (int*) &example_noise_resolution, 1, 64);
                     
                     if(ImGui::Button("Generate"))
                         render_context->GeneratePerlin2DNoise(example_noise_resolution, example_noise);

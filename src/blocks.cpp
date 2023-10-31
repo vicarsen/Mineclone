@@ -77,14 +77,14 @@ namespace Game
         {
             BlockMetadata metadata;
             metadata.SetAllFaces(PATH("textures/bedrock.png"));
-            return BlockRegistry::RegisterBlock("minecraft:bedrock", metadata);
+            return BlockRegistry::RegisterBlock("mineclone:bedrock", metadata);
         })();
 
         BlockID DIRT_BLOCK = ([]()
         {
             BlockMetadata metadata;
             metadata.SetAllFaces(PATH("textures/dirt.png"));
-            return BlockRegistry::RegisterBlock("minecraft:dirt", metadata);
+            return BlockRegistry::RegisterBlock("mineclone:dirt", metadata);
         })();
 
         BlockID GRASS_BLOCK = ([]()
@@ -98,7 +98,7 @@ namespace Game
             metadata.face_up = PATH("textures/grass_block_top.png");
             metadata.face_down = PATH("textures/dirt.png");
 
-            return BlockRegistry::RegisterBlock("minecraft:grass_block", metadata);
+            return BlockRegistry::RegisterBlock("mineclone:grass_block", metadata);
         })();
     };
 };
