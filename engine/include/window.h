@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <mutex>
 
 #include <GLFW/glfw3.h>
 
@@ -31,7 +32,7 @@ namespace Window
         inline unsigned int GetWidth() const noexcept { return width; }
         inline unsigned int GetHeight() const noexcept { return height; }
         inline float GetAspectRatio() const noexcept { return width * 1.0f / height; }
-        inline const std::string& GetTitle() const noexcept { return title; }
+        inline const ::std::string& GetTitle() const noexcept { return title; }
 
         inline GLFWwindow* GetInternalWindow() const noexcept { return window; }
 
@@ -39,9 +40,9 @@ namespace Window
         GLFWwindow* window;
         unsigned int width;
         unsigned int height;
-        std::string title;
+        ::std::string title;
 
-        mutable std::mutex mutex;
+        mutable ::std::mutex mutex;
     };
 };
 
