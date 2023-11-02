@@ -16,6 +16,6 @@ DECLARE_LOG_CATEGORY(Files);
 
 namespace Files
 {
-    std::string ReadFile(const char* path);
+    ::std::string ReadFile(const char* path);
 };
 
