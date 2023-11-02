@@ -7,12 +7,12 @@ DEFINE_LOG_CATEGORY(LogTemp, CONSOLE_LOGGER(trace));
 
 namespace Logger
 {
-    static std::shared_ptr<spdlog::logger> CreateConsoleLogger(const char* name, const ConsoleLoggerDesc& desc);
-    static std::shared_ptr<spdlog::logger> CreateFileLogger(const char* name, const FileLoggerDesc& desc);
+    static ::std::shared_ptr<::spdlog::logger> CreateConsoleLogger(const char* name, const ConsoleLoggerDesc& desc);
+    static ::std::shared_ptr<::spdlog::logger> CreateFileLogger(const char* name, const FileLoggerDesc& desc);
 
-    std::shared_ptr<spdlog::logger> CreateLogger(const char* name, const LoggerDesc& desc)
+    ::std::shared_ptr<::spdlog::logger> CreateLogger(const char* name, const LoggerDesc& desc)
     {
-        std::shared_ptr<spdlog::logger> logger;
+        ::std::shared_ptr<::spdlog::logger> logger;
 
         switch(desc.type)
         {
@@ -25,16 +25,14 @@ namespace Logger
         return logger;
     }
 
-    static std::shared_ptr<spdlog::logger> CreateConsoleLogger(const char* name, const ConsoleLoggerDesc& desc)
+    static ::std::shared_ptr<::spdlog::logger> CreateConsoleLogger(const char* name, const ConsoleLoggerDesc& desc)
     {
-        std::shared_ptr<spdlog::logger> logger = spdlog::stdout_color_mt(name);
-        return logger;
+        return ::spdlog::stdout_color_mt(name);
     }
 
-    static std::shared_ptr<spdlog::logger> CreateFileLogger(const char* name, const FileLoggerDesc& desc)
+    static ::std::shared_ptr<::spdlog::logger> CreateFileLogger(const char* name, const FileLoggerDesc& desc)
     {
-        std::shared_ptr<spdlog::logger> logger = spdlog::basic_logger_mt(name, desc.file_path);
-        return logger;
+        return ::spdlog::basic_logger_mt(name, desc.file_path);
     }
 };
 
