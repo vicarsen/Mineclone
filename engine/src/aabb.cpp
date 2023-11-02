@@ -2,14 +2,16 @@
 #include "gui/aabb.h"
 #include "format/aabb.h"
 
+#include "gui/mathematics.h"
+
 namespace GUI
 {
-    void InputAABB(const char* name, ::Math::AABB& aabb)
+    void InputAABB(const char* name, ::Math::AABB& aabb, const char* format, ImGuiInputTextFlags flags)
     {
         if(TreeNode(name))
         {
-            InputFloat3("Min", &aabb.min[0]);
-            InputFloat3("Max", &aabb.max[0]);
+            InputVec3("Min", &aabb.min, format, flags);
+            InputVec3("Max", &aabb.max, format, flags);
 
             TreePop();
         }
