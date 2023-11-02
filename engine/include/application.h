@@ -24,6 +24,10 @@ public:
     Application();
     ~Application();
 
+    virtual void Init() {}
+    virtual void Update() {}
+    virtual void Destroy() {}
+
     void Run();
 
     inline Render::RenderThread& GetRenderThread() noexcept { return *render_thread; }

@@ -81,6 +81,8 @@ void ApplicationHandler::Handle(const Input::KeyEvent& key_event)
 
 void Application::Run()
 {
+    Init();
+
     const float player_speed = 5.0f, player_warp_speed = 200.0f, player_sensitivity = 0.1f;
     float player_pitch = 0.0f;
     float player_yaw = 0.0f;
@@ -163,5 +165,7 @@ void Application::Run()
             count = 0;
         }
     }
+
+    Destroy();
 }
 
