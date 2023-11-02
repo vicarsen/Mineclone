@@ -1,8 +1,7 @@
 // Based on https://gist.github.com/podgorskiy/e698d18879588ada9014768e3e82a644
 #pragma once
 
-#include <glm/glm.hpp>
-
+#include "mathematics.h"
 #include "aabb.h"
 
 namespace Math
@@ -21,15 +20,15 @@ namespace Math
         };
 
     public:
-        Frustum(const glm::mat4& matrix);
+        Frustum(const mat4& matrix);
 
         bool IsAABBVisible(const AABB& aabb) const;
 
-        inline const glm::vec4& GetPlane(Plane plane) const noexcept { return planes[(int) plane]; }
+        inline const vec4& GetPlane(Plane plane) const noexcept { return planes[(int) plane]; }
 
     private:
-        glm::vec4 planes[6];
-        glm::vec3 corners[8];
+        vec4 planes[6];
+        vec3 corners[8];
     };
 };
 
