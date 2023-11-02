@@ -1,13 +1,13 @@
 #pragma once
 
-#include <glm/glm.hpp>
+#include "mathematics.h"
 
 namespace Math
 {
     struct AABB
     {
-        glm::vec3 min;
-        glm::vec3 max;
+        vec3 min;
+        vec3 max;
     };
 };
 

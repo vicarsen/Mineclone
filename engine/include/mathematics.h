@@ -6,16 +6,30 @@
 
 namespace Math
 {
+    using namespace glm;
+
     template<typename Tp>
     inline bool Inside(const Tp& x, const Tp& min, const Tp& max)
     {
         return min <= x && x < max;
     }
 
-    template<>
-    bool Inside<glm::ivec3>(const glm::ivec3& v, const glm::ivec3& min, const glm::ivec3& max);
+    template<typename Tp>
+    inline bool Inside(const tvec2<Tp>& v, const tvec2<Tp>& min, const tvec2<Tp>& max)
+    {
+        return Inside(v.x, min.x, max.x) && Inside(v.y, min.y, max.y);
+    }
 
-    template<>
-    bool Inside<glm::vec3>(const glm::vec3& v, const glm::vec3& min, const glm::vec3& max);
+    template<typename Tp>
+    inline bool Inside(const tvec3<Tp>& v, const tvec3<Tp>& min, const tvec3<Tp>& max)
+    {
+        return Inside(v.x, min.x, max.x) && Inside(v.y, min.y, max.y) && Inside(v.z, min.z, max.z);
+    }
+
+    template<typename Tp>
+    inline bool Inside(const tvec4<Tp>& v, const tvec4<Tp>& min, const tvec4<Tp>& max)
+    {
+        return Inside(v.x, min.x, max.x) && Inside(v.y, min.y, max.y) && Inside(v.z, min.z, max.z) && Inside(v.w, min.w, max.w);
+    }
 };
 
