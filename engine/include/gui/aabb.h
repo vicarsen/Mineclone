@@ -6,6 +6,6 @@
 
 namespace GUI
 {
-    void InputAABB(const char* name, ::Math::AABB& aabb, const char* format = "%.3f", ImGuiInputTextFlags flags = 0);
+    void InputAABB(const char* label, ::Math::AABB* aabb, const char* format = "%.3f", ImGuiInputTextFlags flags = 0);
 };
 

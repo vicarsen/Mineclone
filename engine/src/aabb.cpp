@@ -6,12 +6,12 @@
 
 namespace GUI
 {
-    void InputAABB(const char* name, ::Math::AABB& aabb, const char* format, ImGuiInputTextFlags flags)
+    void InputAABB(const char* label, ::Math::AABB* aabb, const char* format, ImGuiInputTextFlags flags)
     {
-        if(TreeNode(name))
+        if(TreeNode(label))
         {
-            InputVec3("Min", &aabb.min, format, flags);
-            InputVec3("Max", &aabb.max, format, flags);
+            InputVec3("Min", &aabb->min, format, flags);
+            InputVec3("Max", &aabb->max, format, flags);
 
             TreePop();
         }

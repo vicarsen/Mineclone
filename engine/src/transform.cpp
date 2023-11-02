@@ -1,11 +1,13 @@
 #include "transform.h"
+#include "gui/transform.h"
+#include "format/transform.h"
 
-#include <glm/gtx/transform.hpp>
+#include "gui/mathematics.h"
 
 namespace Math
 {
     Transform::Transform() :
-        position(0.0f, 0.0f, 0.0f), rotation(glm::vec3{ 0.0f, 0.0f, 0.0f }), scale(1.0f, 1.0f, 1.0f)
+        position(0.0f, 0.0f, 0.0f), rotation(vec3{ 0.0f, 0.0f, 0.0f }), scale(1.0f, 1.0f, 1.0f)
     {
     }
 
@@ -13,27 +15,49 @@ namespace Math
     {
     }
 
-    glm::mat4 Transform::GetMatrix() const
+    mat4 Transform::GetMatrix() const
     {
-        glm::mat4 translation = glm::translate(glm::mat4(1.0f), this->position);
-        glm::mat4 rotation = glm::toMat4(this->rotation);
-        glm::mat4 scale = glm::scale(glm::mat4(1.0f), this->scale);
+        mat4 translation = glm::translate(mat4(1.0f), this->position);
+        mat4 rotation = glm::toMat4(this->rotation);
+        mat4 scale = glm::scale(mat4(1.0f), this->scale);
         return translation * rotation * scale;
     }
 
-    glm::vec3 Transform::Forward()
+    vec3 Transform::Forward()
     {
-        return rotation * glm::vec3(0.0f, 0.0f, -1.0f);
+        return rotation * vec3(0.0f, 0.0f, -1.0f);
     }
 
-    glm::vec3 Transform::Up()
+    vec3 Transform::Up()
     {
-        return rotation * glm::vec3(0.0f, 1.0f, 0.0f);
+        return rotation * vec3(0.0f, 1.0f, 0.0f);
     }
 
-    glm::vec3 Transform::Right()
+    vec3 Transform::Right()
     {
-        return rotation * glm::vec3(1.0f, 0.0f, 0.0f);
+        return rotation * vec3(1.0f, 0.0f, 0.0f);
     }
+};
+
+namespace GUI
+{
+    namespace Math
+    {
+        void InputTransform(const char* label, ::Math::Transform* transform)
+        {
+            if(TreeNode(label))
+            {
+                ::Math::vec3 euler = ::Math::eulerAngles(transform->Rotation());
+
+                DragVec3("Position", &transform->Position());
+                DragVec3("Scale", &transform->Scale());
+                DragVec3("Euler", &euler);
+
+                TreePop();
+
+                transform->Rotation() = euler;
+            }
+        }
+    };
 };
 
