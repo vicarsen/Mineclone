@@ -10,8 +10,8 @@ namespace GUI
     {
         if(TreeNode(label))
         {
-            InputVec3("Min", &aabb->min, format, flags);
-            InputVec3("Max", &aabb->max, format, flags);
+            Math::InputVec3("Min", &aabb->min, format, flags);
+            Math::InputVec3("Max", &aabb->max, format, flags);
 
             TreePop();
         }

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <string>
-
 #include "logger.h"
+
+#include "utils/string.h"
 
 #ifdef NDEBUG
 #define PATH(asset) "../assets/" asset
@@ -16,6 +16,6 @@ DECLARE_LOG_CATEGORY(Files);
 
 namespace Files
 {
-    ::std::string ReadFile(const char* path);
+    ::Utils::String ReadFile(const char* path);
 };
 

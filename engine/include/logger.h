@@ -3,8 +3,10 @@
 #define SPDLOG_ACTIVE_LEVEL SPDLOG_LEVEL_TRACE
 #include <spdlog/spdlog.h>
 
-#define DECLARE_LOG_CATEGORY(name) extern ::std::shared_ptr<::spdlog::logger> CategoryLogger##name;
-#define DEFINE_LOG_CATEGORY(name, desc) ::std::shared_ptr<::spdlog::logger> CategoryLogger##name = ::Logger::CreateLogger(#name, desc);
+#include "utils/memory.h"
+
+#define DECLARE_LOG_CATEGORY(name) extern ::Utils::SharedPointer<::spdlog::logger> CategoryLogger##name;
+#define DEFINE_LOG_CATEGORY(name, desc) ::Utils::SharedPointer<::spdlog::logger> CategoryLogger##name = ::Logger::CreateLogger(#name, desc);
 
 #define CONSOLE_LOGGER(_level) ::Logger::LoggerDesc { .type = ::Logger::LoggerDesc::CONSOLE, .level = ::spdlog::level::_level, .console_logger = ::Logger::ConsoleLoggerDesc{} }
 #define FILE_LOGGER(_level, _file_path) ::Logger::LoggerDesc { .type = ::Logger::LoggerDesc::FILE, .level = ::spdlog::level::_level, .file_logger = ::Logger::FileLoggerDesc{ .file_path = _file_path } }
@@ -42,6 +44,6 @@ namespace Logger
         };
     };
 
-    ::std::shared_ptr<::spdlog::logger> CreateLogger(const char* name, const LoggerDesc& desc);
+    ::Utils::SharedPointer<::spdlog::logger> CreateLogger(const char* name, const LoggerDesc& desc);
 };
 

@@ -1,10 +1,14 @@
 #pragma once
 
 #include <tuple>
-#include <vector>
 
-namespace std_ext
+#include "type.h"
+
+namespace Utils
 {
+    template<typename... Types>
+    using Tuple = ::std::tuple<Types...>;
+
     /*
      * Tuple type index. Source: https://stackoverflow.com/questions/18063451/get-index-of-a-tuple-elements-type
     */
@@ -12,24 +16,24 @@ namespace std_ext
     struct Index;
 
     template<class T, class... Types>
-    struct Index<T, std::tuple<T, Types...>>
+    struct Index<T, Tuple<T, Types...>>
     {
-        static const std::size_t value = 0;
+        static const USize value = 0;
     };
 
     template<class T, class U, class... Types>
-    struct Index<T, std::tuple<U, Types...>>
+    struct Index<T, Tuple<U, Types...>>
     {
-        static const std::size_t value = 1 + Index<T, std::tuple<Types...>>::value;
+        static const USize value = 1 + Index<T, Tuple<Types...>>::value;
     };
     /*
      * Here ends code from stackoverflow.
     */
-
+    
     template<class T, class Tuple>
     T& get(Tuple& tuple)
     {
-        return std::get<Index<T, Tuple>::value>(tuple);
+        return ::std::get<Index<T, Tuple>::value>(tuple);
     }
 
     template<typename... Args>

@@ -3,9 +3,9 @@
 #include <imgui.h>
 #include <implot.h>
 
-#include <string>
-#include <vector>
-#include <memory>
+#include "utils/array.h"
+#include "utils/string.h"
+#include "utils/memory.h"
 
 namespace GUI
 {
@@ -15,7 +15,7 @@ namespace GUI
     {
         struct WindowContext
         {
-            std::string name;
+            ::Utils::String name;
             bool opened;
         };
     };
@@ -62,15 +62,15 @@ namespace GUI
         void Draw();
 
         template<typename WindowType, typename... Args>
-        ::std::shared_ptr<WindowType> emplace(Args&&... args)
+        ::Utils::SharedPointer<WindowType> Push(Args&&... args)
         {
-            std::shared_ptr<Window> ptr = std::make_shared<WindowType>(std::forward<Args>(args)...);
-            windows.emplace_back(ptr);
-            return ::std::static_pointer_cast<WindowType>(ptr);
+            ::Utils::SharedPointer<Window> ptr = ::Utils::MakeShared<WindowType>(::std::forward<Args>(args)...);
+            windows.Push(ptr);
+            return ::Utils::StaticPointerCast<WindowType>(ptr);
         }
 
     private:
-        std::vector<std::shared_ptr<Window>> windows;
+        ::Utils::Array<::Utils::SharedPointer<Window>> windows;
     };
 
     namespace Plot

@@ -26,7 +26,7 @@ namespace GUI
         struct GameDebugInfoEvent
         {
             float fps;
-            glm::vec3 player_position;
+            ::Math::vec3 player_position;
         };
 
         struct WorldGenerationInfoEvent
@@ -55,7 +55,7 @@ namespace GUI
 
         private:
             float game_fps;
-            glm::vec3 player_position;
+            ::Math::vec3 player_position;
             
             float world_generation_fps;
             unsigned int chunks_generated;

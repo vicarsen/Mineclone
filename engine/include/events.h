@@ -1,11 +1,11 @@
 #pragma once
 
-#include <unordered_map>
-#include <vector>
-#include <memory>
-#include <mutex>
-
-#include "std_ext.h"
+#include "utils/type.h"
+#include "utils/tuple.h"
+#include "utils/array.h"
+#include "utils/hash.h"
+#include "utils/thread.h"
+#include "utils/memory.h"
 
 namespace Events
 {
@@ -21,15 +21,15 @@ namespace Events
     {
     public:
         template<typename EventType>
-        struct handles_type
+        struct HandlesType
         {
-            static constexpr bool value = (std::is_same_v<EventType, EventTypes> || ...);
+            static constexpr bool value = (::std::is_same_v<EventType, EventTypes> || ...);
         };
 
         template<typename EventType>
-        static constexpr bool handles_type_v = handles_type<EventType>::value;
+        static constexpr bool handles_type_v = HandlesType<EventType>::value;
 
-        typedef std_ext::Pack<EventTypes...> EventTypesPack;
+        typedef ::Utils::Pack<EventTypes...> EventTypesPack;
         typedef EventHandler<EventTypes...> HandlerType;
     };
 
@@ -47,62 +47,35 @@ namespace Events
         template<typename EventType>
         void Dispatch(const EventType& event)
         {
-            std::lock_guard<std::mutex> guard(mutex);
-            Events<EventType>().events.push_back(event);
+            Events<EventType>().events.Push(event);
         }
 
         template<typename EventType, typename... Args>
         void Dispatch(Args&&... args)
         {
-            std::lock_guard<std::mutex> guard(mutex);
-            Events<EventType>().events.emplace_back(std::forward<Args>(args)...);
+            Events<EventType>().events.Push(std::forward<Args>(args)...);
         }
 
         template<typename EventType>
-        void RegisterHandler(const std::shared_ptr<EventHandlerBase<EventType>>& handler)
+        void RegisterHandler(const ::Utils::SharedPointer<EventHandlerBase<EventType>>& handler)
         {
-            std::lock_guard<std::mutex> guard(mutex);
-            Handlers<EventType>().handlers.emplace_back(handler);
+            Handlers<EventType>().handlers.Push(handler);
         }
 
         template<typename... EventTypes>
-        void __RegisterHandler(std_ext::Pack<EventTypes...> pack, const std::shared_ptr<EventHandler<EventTypes...>>& handler)
+        void __RegisterHandler(::Utils::Pack<EventTypes...> pack, const ::Utils::SharedPointer<EventHandler<EventTypes...>>& handler)
         {
             (RegisterHandler<EventTypes>(handler), ...);
         }
 
         template<typename EventHandlerType>
-        void RegisterHandler(const std::shared_ptr<EventHandlerType>& handler)
+        void RegisterHandler(const ::Utils::SharedPointer<EventHandlerType>& handler)
         {
-            __RegisterHandler(typename EventHandlerType::EventTypesPack{}, std::static_pointer_cast<typename EventHandlerType::HandlerType>(handler));
+            __RegisterHandler(typename EventHandlerType::EventTypesPack{}, ::Utils::StaticPointerCast<typename EventHandlerType::HandlerType>(handler));
         }
 
-        /*template<typename EventType>
         void ProcessEvents()
         {
-            EventArray<EventType>& events = Events<EventType>();
-            EventHandlerArray<EventType>& event_handlers = Handlers<EventType>();
-
-            for(int i = 0; i < event_handlers.handlers.size(); )
-                if(auto handler = event_handlers.handlers[i].lock())
-                {
-                    for(int j = 0; j < events.events.size(); j++)
-                        handler->Handle(events.events[j]);
-                    i++;
-                }
-                else
-                {
-                    event_handlers.handlers[i] = event_handlers.handlers.back();
-                    event_handlers.handlers.pop_back();
-                }
-
-            events.events.clear();
-        }*/
-
-        void ProcessEvents()
-        {
-            std::lock_guard<std::mutex> guard(mutex);
-
             for(auto&[type, event_arr] : events)
             {
                 auto it = handlers.find(type);
@@ -129,7 +102,7 @@ namespace Events
             virtual ~EventArray() = default;
         
         public:
-            std::vector<EventType> events;
+            ::Utils::Array<EventType> events;
         };
 
         class EventHandlerArrayBase
@@ -138,7 +111,7 @@ namespace Events
             EventHandlerArrayBase() = default;
             virtual ~EventHandlerArrayBase() = default;
 
-            virtual void Handle(const std::shared_ptr<EventArrayBase>& event_arr) = 0;
+            virtual void Handle(const ::Utils::SharedPointer<EventArrayBase>& event_arr) = 0;
         };
 
         template<typename EventType>
@@ -148,12 +121,12 @@ namespace Events
             EventHandlerArray() = default;
             virtual ~EventHandlerArray() = default;
 
-            virtual void Handle(const std::shared_ptr<EventArrayBase>& _event_arr) override
+            virtual void Handle(const ::Utils::SharedPointer<EventArrayBase>& _event_arr) override final
             {
-                const auto& event_arr = std::static_pointer_cast<EventArray<EventType>>(_event_arr);
-                for(std::size_t i = 0; i < event_arr->events.size(); i++)
+                const auto& event_arr = ::Utils::StaticPointerCast<EventArray<EventType>>(_event_arr);
+                for(::Utils::USize i = 0; i < event_arr->events.Size(); i++)
                 {
-                    for(std::size_t j = 0; j < handlers.size(); )
+                    for(::Utils::USize j = 0; j < handlers.Size(); )
                         if(auto handler = handlers[j].lock())
                         {
                             handler->Handle(event_arr->events[i]);
@@ -161,14 +134,14 @@ namespace Events
                         }
                         else
                         {
-                            handlers[j] = handlers.back();
-                            handlers.pop_back();
+                            handlers[j] = handlers.Back();
+                            handlers.Pop();
                         }
                 }
             }
 
         public:
-            std::vector<std::weak_ptr<EventHandlerBase<EventType>>> handlers;
+            ::Utils::Array<::Utils::WeakPointer<EventHandlerBase<EventType>>> handlers;
         };
 
     private:
@@ -177,9 +150,9 @@ namespace Events
         {
             auto& ptr = events[typeid(EventType).hash_code()];
             if(ptr == nullptr)
-                ptr = std::make_shared<EventArray<EventType>>();
+                ptr = ::Utils::MakeShared<EventArray<EventType>>();
         
-            return *std::static_pointer_cast<EventArray<EventType>>(ptr);
+            return *::Utils::StaticPointerCast<EventArray<EventType>>(ptr);
         }
 
         template<typename EventType>
@@ -187,15 +160,56 @@ namespace Events
         {
             auto& ptr = handlers[typeid(EventType).hash_code()];
             if(ptr == nullptr)
-                ptr = std::make_shared<EventHandlerArray<EventType>>();
+                ptr = ::Utils::MakeShared<EventHandlerArray<EventType>>();
             
-            return *std::static_pointer_cast<EventHandlerArray<EventType>>(ptr);
+            return *::Utils::StaticPointerCast<EventHandlerArray<EventType>>(ptr);
         }
 
     private:
-        std::unordered_map<std::size_t, std::shared_ptr<EventArrayBase>> events;
-        std::unordered_map<std::size_t, std::shared_ptr<EventHandlerArrayBase>> handlers;
-        std::mutex mutex;
+        ::Utils::HashMap<::Utils::USize, ::Utils::SharedPointer<EventArrayBase>> events;
+        ::Utils::HashMap<::Utils::USize, ::Utils::SharedPointer<EventHandlerArrayBase>> handlers;
+    };
+
+    class EventDispatcherMT
+    {
+    public:
+        template<typename EventType>
+        inline void Dispatch(const EventType& event)
+        {
+            ::Utils::LockGuard<> guard(mutex);
+            dispatcher.Dispatch<EventType>(event);
+        }
+
+        template<typename EventType, typename... Args>
+        inline void Dispatch(Args&&... args)
+        {
+            ::Utils::LockGuard<> guard(mutex);
+            dispatcher.Dispatch<EventType, Args...>(::std::forward<Args>(args)...);
+        }
+
+        template<typename EventType>
+        inline void RegisterHandler(const ::Utils::SharedPointer<EventHandlerBase<EventType>>& handler)
+        {
+            ::Utils::LockGuard<> guard(mutex);
+            dispatcher.RegisterHandler<EventType>(handler);
+        }
+        
+        template<typename EventHandlerType>
+        void RegisterHandler(const ::Utils::SharedPointer<EventHandlerType>& handler)
+        {
+            ::Utils::LockGuard<> guard(mutex);
+            dispatcher.RegisterHandler<EventHandlerType>(handler);
+        }
+
+        inline void ProcessEvents()
+        {
+            ::Utils::LockGuard<> guard(mutex);
+            dispatcher.ProcessEvents();
+        }
+
+    private:
+        EventDispatcher dispatcher;
+        ::Utils::Mutex mutex;
     };
 };
 

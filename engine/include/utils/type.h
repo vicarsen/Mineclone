@@ -3,9 +3,11 @@
 #include <cstddef>
 #include <utility>
 
+#define ALWAYS_INLINE inline __attribute__((always_inline))
+
 namespace Utils
 {
-    typedef std::size_t USize;
+    typedef ::std::size_t USize;
 
     template<typename Type>
     class Allocator
@@ -14,24 +16,33 @@ namespace Utils
         typedef Type ValueType;
         typedef Allocator<Type> AllocatorType;
 
-        Allocator() = default;
-        Allocator(AllocatorType&& other) = default;
-        Allocator(const AllocatorType& other) = default;
-
-        ~Allocator() = default;
-
-        AllocatorType& operator=(AllocatorType&& other) = default;
-        AllocatorType& operator=(const AllocatorType& other) = default;
-
-        inline ValueType* Allocate() { return reinterpret_cast<ValueType*>(new unsigned char[sizeof(ValueType)]); }
-        inline ValueType* Allocate(USize n) { return reinterpret_cast<ValueType*>(new unsigned char[sizeof(ValueType) * n]); }
+        static ALWAYS_INLINE constexpr ValueType* Allocate() noexcept { return reinterpret_cast<ValueType*>(new unsigned char[sizeof(ValueType)]); }
+        static ALWAYS_INLINE constexpr ValueType* Allocate(USize n) noexcept { return reinterpret_cast<ValueType*>(new unsigned char[sizeof(ValueType) * n]); }
         
-        inline void Deallocate(ValueType* ptr) { delete reinterpret_cast<unsigned char*>(ptr); }
-        inline void Deallocate(ValueType* ptr, USize n) { delete[] reinterpret_cast<unsigned char*>(ptr); }
+        static ALWAYS_INLINE constexpr void Deallocate(ValueType* ptr) noexcept { delete reinterpret_cast<unsigned char*>(ptr); }
+        static ALWAYS_INLINE constexpr void Deallocate(ValueType* ptr, [[maybe_unused]] USize n) noexcept { delete[] reinterpret_cast<unsigned char*>(ptr); }
 
         template<typename... Args>
-        inline void ConstructAt(ValueType* ptr, Args&&... args) { new (ptr) ValueType(::std::forward(args)...); }
-        inline void DestructAt(ValueType* ptr) { ptr->~ValueType(); }
+        static ALWAYS_INLINE constexpr void ConstructAt(ValueType* ptr, Args&&... args) noexcept { new (ptr) ValueType(::std::forward<Args>(args)...); }
+        static ALWAYS_INLINE constexpr void DestructAt(ValueType* ptr) noexcept { ptr->~ValueType(); }
+    };
+
+    template<>
+    class Allocator<int>
+    {
+    public:
+        typedef int ValueType;
+        typedef Allocator<int> AllocatorType;
+        
+        static ALWAYS_INLINE constexpr ValueType* Allocate() noexcept { return new int; }
+        static ALWAYS_INLINE constexpr ValueType* Allocate(USize n) noexcept { return new int[n]; }
+
+        static ALWAYS_INLINE constexpr void Deallocate(int* ptr) noexcept { delete ptr; }
+        static ALWAYS_INLINE constexpr void Deallocate(int* ptr, [[maybe_unused]] USize n) noexcept { delete[] ptr; }
+
+        static ALWAYS_INLINE constexpr void ConstructAt([[maybe_unused]] int* ptr) noexcept {}
+        static ALWAYS_INLINE constexpr void ConstructAt(int* ptr, int v) noexcept { new (ptr) int(v); }
+        static ALWAYS_INLINE constexpr void DestructAt([[maybe_unused]] int* ptr) noexcept {}
     };
 };
 

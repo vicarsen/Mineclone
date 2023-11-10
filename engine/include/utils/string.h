@@ -1,14 +1,16 @@
 #pragma once
 
 #include "utils/type.h"
+#include "utils/hash.h"
 
 #include <cstdint>
 #include <string>
-#include <unordered_map>
 #include <algorithm>
 
 namespace Utils
 {
+    using String = ::std::string;
+    
     constexpr USize Length(const char* str)
     {
         USize size = 0;
@@ -38,14 +40,14 @@ namespace Utils
         StringID(const StringID& other) = default;
 
         inline StringID(USize ID) : ID(ID) {}
-        inline StringID(const ::std::string& str) : ID(string_to_id[str]) {}
+        inline StringID(const String& str) : ID(string_to_id[str]) {}
 
         ~StringID() = default;
 
         StringID& operator=(StringID&& other) = default;
         StringID& operator=(const StringID& other) = default;
 
-        inline ::std::string ToString() const { return id_to_string[ID]; }
+        inline String ToString() const { return id_to_string[ID]; }
 
         inline bool operator==(const StringID& other) const noexcept { return ID == other.ID; }
         inline bool operator!=(const StringID& other) const noexcept { return ID != other.ID; }
@@ -54,7 +56,7 @@ namespace Utils
 
         inline operator USize() const noexcept { return ID; }
 
-        static inline StringID Register(const ::std::string& str)
+        static inline StringID Register(const String& str)
         {
             static USize ID = 1;
             string_to_id[str] = ID;
@@ -65,8 +67,8 @@ namespace Utils
     private:
         USize ID;
 
-        inline static ::std::unordered_map<::std::string, USize> string_to_id;
-        inline static ::std::unordered_map<USize, ::std::string> id_to_string;
+        inline static HashMap<String, USize> string_to_id;
+        inline static HashMap<USize, String> id_to_string;
     };
 
     template<StringLiteral literal>

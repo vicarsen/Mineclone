@@ -1,6 +1,5 @@
 #pragma once
 
-#include <thread>
 #include <chrono>
 
 #include <queue>
@@ -8,16 +7,12 @@
 #include <functional>
 #include <unordered_map>
 
-#include <glm/glm.hpp>
-
 #include "logger.h"
-
-#include "gui.h"
+#include "mathematics.h"
 
 #include "utils/array.h"
 #include "utils/string.h"
-
-#include "std_ext.h"
+#include "utils/thread.h"
 
 DECLARE_LOG_CATEGORY(Profiler);
 

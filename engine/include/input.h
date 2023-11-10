@@ -1,10 +1,10 @@
 #pragma once
 
 #include <GLFW/glfw3.h>
-#include <glm/glm.hpp>
 
 #include "logger.h"
 #include "events.h"
+#include "mathematics.h"
 
 DECLARE_LOG_CATEGORY(Input);
 
@@ -27,12 +27,12 @@ namespace Input
 
     struct CursorMovedEvent
     {
-        glm::vec2 position;
+        ::Math::vec2 position;
     };
 
     InputAction GLFWActionToInputAction(int action);
 
-    class InputHandler : public Events::EventHandler<KeyEvent, ButtonEvent, CursorMovedEvent>
+    class InputHandler : public ::Events::EventHandler<KeyEvent, ButtonEvent, CursorMovedEvent>
     {
     public:
         InputHandler(GLFWwindow* window);
@@ -61,8 +61,8 @@ namespace Input
         bool IsButtonReleased(unsigned int button);
         bool IsButtonJustReleased(unsigned int button);
 
-        glm::vec2 GetCursorPosition();
-        glm::vec2 GetCursorMovement();
+        ::Math::vec2 GetCursorPosition();
+        ::Math::vec2 GetCursorMovement();
 
         inline CursorMode GetCursorMode() const noexcept { return cursor_mode; }
         void SetCursorMode(CursorMode cursor_mode);
@@ -82,8 +82,8 @@ namespace Input
         bool buttons_just_pressed[GLFW_MOUSE_BUTTON_LAST + 1];
         bool buttons_just_released[GLFW_MOUSE_BUTTON_LAST + 1];
 
-        glm::vec2 cursor_position;
-        glm::vec2 cursor_movement;
+        ::Math::vec2 cursor_position;
+        ::Math::vec2 cursor_movement;
 
         CursorMode cursor_mode;
         bool capture_cursor_movement;

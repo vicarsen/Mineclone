@@ -2,6 +2,7 @@
 
 #include "logger.h"
 
+#include "mathematics.h"
 #include "transform.h"
 #include "events.h"
 #include "render.h"
@@ -10,18 +11,18 @@ DECLARE_LOG_CATEGORY(Player);
 
 namespace Game
 {
-    class Player : public Events::EventHandler<Render::FramebufferEvent>
+    class Player : public ::Events::EventHandler<::Render::FramebufferEvent>
     {
     public:
         Player(float fov, float aspect_ratio);
         ~Player();
 
-        virtual void Handle(const Render::FramebufferEvent& event) override;
+        virtual void Handle(const ::Render::FramebufferEvent& event) override;
 
         inline ::Math::Transform& GetTransform() noexcept { return transform; }
         inline const ::Math::Transform& GetTransform() const noexcept { return transform; }
 
-        inline const glm::mat4& GetProjection() const noexcept { return projection; }
+        inline const ::Math::mat4& GetProjection() const noexcept { return projection; }
 
         void SetFOV(float fov);
         void SetAspectRatio(float aspect_ratio);
@@ -36,7 +37,7 @@ namespace Game
 
     private:
         ::Math::Transform transform;
-        glm::mat4 projection;
+        ::Math::mat4 projection;
         float fov, aspect_ratio, near, far;
         float render_distance;
     };

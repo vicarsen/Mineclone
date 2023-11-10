@@ -1,11 +1,11 @@
 #pragma once
 
-#include <string>
-#include <mutex>
-
 #include <GLFW/glfw3.h>
 
 #include "logger.h"
+
+#include "utils/string.h"
+#include "utils/thread.h"
 
 DECLARE_LOG_CATEGORY(GLFWInternal);
 DECLARE_LOG_CATEGORY(Window);
@@ -32,7 +32,7 @@ namespace Window
         inline unsigned int GetWidth() const noexcept { return width; }
         inline unsigned int GetHeight() const noexcept { return height; }
         inline float GetAspectRatio() const noexcept { return width * 1.0f / height; }
-        inline const ::std::string& GetTitle() const noexcept { return title; }
+        inline const ::Utils::String& GetTitle() const noexcept { return title; }
 
         inline GLFWwindow* GetInternalWindow() const noexcept { return window; }
 
@@ -40,9 +40,9 @@ namespace Window
         GLFWwindow* window;
         unsigned int width;
         unsigned int height;
-        ::std::string title;
+        ::Utils::String title;
 
-        mutable ::std::mutex mutex;
+        mutable ::Utils::Mutex mutex;
     };
 };
 

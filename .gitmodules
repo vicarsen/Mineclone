@@ -15,3 +15,9 @@
 	path = engine/vendor/implot
     url = https://github.com/vicarsen/implot.git
 
+[submodule "tests/vendor/googlebenchmark"]
+	path = tests/vendor/googlebenchmark
+	url = https://github.com/google/benchmark.git
+[submodule "engine/vendor/jemalloc"]
+	path = engine/vendor/jemalloc
+	url = https://github.com/jemalloc/jemalloc-cmake.git

@@ -2,6 +2,9 @@
 
 #include "logger.h"
 
+#include "utils/array.h"
+#include "utils/string.h"
+
 DECLARE_LOG_CATEGORY(BlockRegistry);
 
 namespace Game
@@ -31,15 +34,15 @@ namespace Game
     // The metadata of a block.
     struct BlockMetadata
     {
-        std::string face_north;
-        std::string face_south;
-        std::string face_east;
-        std::string face_west;
-        std::string face_up;
-        std::string face_down;
+        ::Utils::String face_north;
+        ::Utils::String face_south;
+        ::Utils::String face_east;
+        ::Utils::String face_west;
+        ::Utils::String face_up;
+        ::Utils::String face_down;
 
         // Sets all the faces to have the same texture, given by "path".
-        void SetAllFaces(const std::string& path);
+        void SetAllFaces(const ::Utils::String& path);
     };
 
     namespace __detail
@@ -47,7 +50,7 @@ namespace Game
         // All the data about a block stored by the block registry.
         struct BlockData
         {
-            std::string name;
+            ::Utils::String name;
             BlockMetadata metadata;
 
             // Identifier of the block's render data.
@@ -236,10 +239,10 @@ namespace Game
         BlockRegistry() = delete;
 
         // Registers a new block, with a given name and some given metadata, returning an ID to refer to it later.
-        static BlockID RegisterBlock(const std::string& name, const BlockMetadata& metadata);
+        static BlockID RegisterBlock(const ::Utils::String& name, const BlockMetadata& metadata);
 
         // Returns the filepath of a block face's texture.
-        static const std::string& GetBlockFaceTexture(BlockID block, Direction face);
+        static const ::Utils::String& GetBlockFaceTexture(BlockID block, Direction face);
 
         inline static Iterator Begin() noexcept { return Iterator(0); }
         inline static Iterator End() noexcept { return Iterator(blocks.size()); }
@@ -259,7 +262,7 @@ namespace Game
         inline static CRIterator CRFind(BlockID block) noexcept { return CRIterator(block); }
 
     private:
-        static std::vector<BlockData> blocks;
+        static ::Utils::Array<BlockData> blocks;
 
         friend class __detail::BlockIterator;
         friend class __detail::ConstBlockIterator;

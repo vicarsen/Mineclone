@@ -17,7 +17,7 @@
 #include <vector>
 #include <cassert>
 
-#include "format/glm.h"
+#include "format/mathematics.h"
 #include "format/blocks.h"
 
 #include "gui/aabb.h"
@@ -1667,7 +1667,7 @@ namespace GUI
 
             if(Begin())
             {
-                InputAABB("AABB", example_aabb);
+                InputAABB("AABB", &example_aabb);
 
                 if(ImGui::TreeNode("Perlin 2D"))
                 {

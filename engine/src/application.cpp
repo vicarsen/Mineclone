@@ -22,7 +22,7 @@ Application::Application()
 {
     instance = this;
 
-    event_dispatcher = std::make_shared<Events::EventDispatcher>();
+    event_dispatcher = std::make_shared<Events::EventDispatcherMT>();
 
     window = std::make_shared<Window::Window>(800, 600, "Mineclone");
 

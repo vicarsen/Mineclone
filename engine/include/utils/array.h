@@ -7,6 +7,210 @@
 
 namespace Utils
 {
+    namespace __detail
+    {
+        namespace __iterator
+        {
+            template<typename Type>
+            class ArrayConstIterator
+            {
+            public:
+                typedef Type ValueType;
+                typedef ArrayConstIterator<Type> ArrayConstIteratorType;
+
+                ALWAYS_INLINE constexpr ArrayConstIterator(const ValueType* v) noexcept : v(v) {}
+                ALWAYS_INLINE constexpr ArrayConstIterator(ArrayConstIteratorType&& other) noexcept = default;
+                ALWAYS_INLINE constexpr ArrayConstIterator(const ArrayConstIteratorType& other) noexcept = default;
+
+                ALWAYS_INLINE constexpr ~ArrayConstIterator() noexcept = default;
+
+                ALWAYS_INLINE constexpr ArrayConstIteratorType& operator=(ArrayConstIteratorType&& other) noexcept = default;
+                ALWAYS_INLINE constexpr ArrayConstIteratorType& operator=(const ArrayConstIteratorType& other) noexcept = default;
+
+                ALWAYS_INLINE constexpr ArrayConstIteratorType& operator+=(USize dt) noexcept { v += dt; return *this; }
+                ALWAYS_INLINE constexpr ArrayConstIteratorType& operator-=(USize dt) noexcept { v -= dt; return *this; }
+
+                ALWAYS_INLINE constexpr ArrayConstIteratorType& operator++() noexcept { ++v; return *this; }
+                ALWAYS_INLINE constexpr ArrayConstIteratorType operator++(int) noexcept { ArrayConstIteratorType copy(*this); v++; return copy; }
+
+                ALWAYS_INLINE constexpr ArrayConstIteratorType& operator--() noexcept { --v; return *this; }
+                ALWAYS_INLINE constexpr ArrayConstIteratorType operator--(int) noexcept { ArrayConstIteratorType copy(*this); v--; return copy; }
+
+                ALWAYS_INLINE constexpr ArrayConstIteratorType operator+(USize dt) const noexcept { return ArrayIteratorType(v + dt); }
+                ALWAYS_INLINE constexpr ArrayConstIteratorType operator-(USize dt) const noexcept { return ArrayIteratorType(v - dt); }
+
+                ALWAYS_INLINE constexpr USize operator-(const ArrayConstIteratorType& other) const noexcept { return v - other.v; }
+
+                ALWAYS_INLINE constexpr const ValueType* operator->() const noexcept { return v; }
+                ALWAYS_INLINE constexpr const ValueType& operator*() const noexcept { return *v; }
+
+                ALWAYS_INLINE constexpr const ValueType& operator[](USize i) const noexcept { return v[i]; }
+
+                ALWAYS_INLINE constexpr operator const ValueType*() const noexcept { return v; }
+
+                ALWAYS_INLINE constexpr bool operator==(const ArrayConstIteratorType& other) const noexcept { return v == other.v; }
+                ALWAYS_INLINE constexpr bool operator!=(const ArrayConstIteratorType& other) const noexcept { return v != other.v; }
+
+                ALWAYS_INLINE constexpr bool operator<(const ArrayConstIteratorType& other) const noexcept { return v < other.v; }
+                ALWAYS_INLINE constexpr bool operator>(const ArrayConstIteratorType& other) const noexcept { return v > other.v; }
+                ALWAYS_INLINE constexpr bool operator<=(const ArrayConstIteratorType& other) const noexcept { return v <= other.v; }
+                ALWAYS_INLINE constexpr bool operator>=(const ArrayConstIteratorType& other) const noexcept { return v >= other.v; }
+
+            public:
+                const ValueType* v;
+            };
+
+            template<typename Type>
+            class ArrayIterator
+            {
+            public:
+                typedef Type ValueType;
+                typedef ArrayIterator<Type> ArrayIteratorType;
+                typedef ArrayConstIterator<Type> ArrayConstIteratorType;
+
+                ALWAYS_INLINE constexpr ArrayIterator(ValueType* v) noexcept : v(v) {}
+                ALWAYS_INLINE constexpr ArrayIterator(ArrayIteratorType&& other) noexcept = default;
+                ALWAYS_INLINE constexpr ArrayIterator(const ArrayIteratorType& other) noexcept = default;
+
+                ALWAYS_INLINE constexpr ~ArrayIterator() noexcept = default;
+
+                ALWAYS_INLINE constexpr ArrayIteratorType& operator=(ArrayIteratorType&& other) noexcept = default;
+                ALWAYS_INLINE constexpr ArrayIteratorType& operator=(const ArrayIteratorType& other) noexcept = default;
+
+                ALWAYS_INLINE constexpr ArrayIteratorType& operator+=(USize dt) noexcept { v += dt; return *this; }
+                ALWAYS_INLINE constexpr ArrayIteratorType& operator-=(USize dt) noexcept { v -= dt; return *this; }
+
+                ALWAYS_INLINE constexpr ArrayIteratorType& operator++() noexcept { ++v; return *this; }
+                ALWAYS_INLINE constexpr ArrayIteratorType operator++(int) noexcept { ArrayIteratorType copy(*this); v++; return copy; }
+
+                ALWAYS_INLINE constexpr ArrayIteratorType& operator--() noexcept { --v; return *this; }
+                ALWAYS_INLINE constexpr ArrayIteratorType operator--(int) noexcept { ArrayIteratorType copy(*this); v--; return copy; }
+
+                ALWAYS_INLINE constexpr ArrayIteratorType operator+(USize dt) const noexcept { return ArrayIteratorType(v + dt); }
+                ALWAYS_INLINE constexpr ArrayIteratorType operator-(USize dt) const noexcept { return ArrayIteratorType(v - dt); }
+
+                ALWAYS_INLINE constexpr USize operator-(const ArrayIteratorType& other) const noexcept { return v - other.v; }
+
+                ALWAYS_INLINE constexpr ValueType* operator->() const noexcept { return v;; }
+                ALWAYS_INLINE constexpr ValueType& operator*() const noexcept { return *v; }
+
+                ALWAYS_INLINE constexpr ValueType& operator[](USize i) const noexcept { return v[i]; }
+
+                ALWAYS_INLINE constexpr operator ValueType*() const noexcept { return v; }
+
+                ALWAYS_INLINE constexpr bool operator==(const ArrayIteratorType& other) const noexcept { return v == other.v; }
+                ALWAYS_INLINE constexpr bool operator!=(const ArrayIteratorType& other) const noexcept { return v != other.v; }
+
+                ALWAYS_INLINE constexpr bool operator<(const ArrayIteratorType& other) const noexcept { return v < other.v; }
+                ALWAYS_INLINE constexpr bool operator>(const ArrayIteratorType& other) const noexcept { return v > other.v; }
+                ALWAYS_INLINE constexpr bool operator<=(const ArrayIteratorType& other) const noexcept { return v <= other.v; }
+                ALWAYS_INLINE constexpr bool operator>=(const ArrayIteratorType& other) const noexcept { return v >= other.v; }
+
+            public:
+                ValueType* v;
+            };
+
+            template<typename Type>
+            class ArrayConstReverseIterator
+            {
+            public:
+                typedef Type ValueType;
+                typedef ArrayConstReverseIterator<Type> ArrayConstReverseIteratorType;
+                typedef ArrayConstIterator<Type> ArrayConstIteratorType;
+
+                ALWAYS_INLINE constexpr ArrayConstReverseIterator(const ValueType* v) noexcept : v(v) {}
+                ALWAYS_INLINE constexpr ArrayConstReverseIterator(ArrayConstReverseIteratorType&& other) noexcept = default;
+                ALWAYS_INLINE constexpr ArrayConstReverseIterator(const ArrayConstReverseIteratorType& other) noexcept = default;
+
+                ALWAYS_INLINE constexpr ArrayConstReverseIterator() noexcept = default;
+
+                ALWAYS_INLINE constexpr ArrayConstReverseIteratorType& operator=(ArrayConstReverseIteratorType&& other) noexcept = default;
+                ALWAYS_INLINE constexpr ArrayConstReverseIteratorType& operator=(const ArrayConstReverseIteratorType& other) noexcept = default;
+
+                ALWAYS_INLINE constexpr ArrayConstReverseIteratorType& operator+=(USize dt) noexcept { v -= dt; return *this; }
+                ALWAYS_INLINE constexpr ArrayConstReverseIteratorType& operator-=(USize dt) noexcept { v += dt; return *this; }
+
+                ALWAYS_INLINE constexpr ArrayConstReverseIteratorType& operator++() noexcept { --v; return *this; }
+                ALWAYS_INLINE constexpr ArrayConstReverseIteratorType operator++(int) noexcept { ArrayConstReverseIteratorType copy(*this); v--; return copy; }
+
+                ALWAYS_INLINE constexpr ArrayConstReverseIteratorType& operator--() noexcept { ++v; return *this; }
+                ALWAYS_INLINE constexpr ArrayConstReverseIteratorType operator--(int) noexcept { ArrayConstReverseIteratorType copy(*this); v++; return copy; }
+
+                ALWAYS_INLINE constexpr ArrayConstReverseIteratorType operator+(USize dt) const noexcept { return ArrayConstReverseIteratorType(v - dt); }
+                ALWAYS_INLINE constexpr ArrayConstReverseIteratorType operator-(USize dt) const noexcept { return ArrayConstReverseIteratorType(v + dt); }
+
+                ALWAYS_INLINE constexpr USize operator-(const ArrayConstReverseIteratorType& other) const noexcept { return v - other.v; }
+
+                ALWAYS_INLINE constexpr const ValueType* operator->() const noexcept { return v; }
+                ALWAYS_INLINE constexpr const ValueType& operator*() const noexcept { return *v; }
+
+                ALWAYS_INLINE constexpr const ValueType& operator[](USize i) const noexcept { return v[i]; }
+
+                ALWAYS_INLINE constexpr operator const ValueType*() const noexcept { return v; }
+
+                ALWAYS_INLINE constexpr bool operator==(const ArrayConstReverseIteratorType& other) const noexcept { return v == other.v; }
+                ALWAYS_INLINE constexpr bool operator!=(const ArrayConstReverseIteratorType& other) const noexcept { return v != other.v; }
+
+                ALWAYS_INLINE constexpr bool operator<(const ArrayConstReverseIteratorType& other) const noexcept { return v < other.v; }
+                ALWAYS_INLINE constexpr bool operator>(const ArrayConstReverseIteratorType& other) const noexcept { return v > other.v; }
+                ALWAYS_INLINE constexpr bool operator<=(const ArrayConstReverseIteratorType& other) const noexcept { return v <= other.v; }
+                ALWAYS_INLINE constexpr bool operator>=(const ArrayConstReverseIteratorType& other) const noexcept { return v >= other.v; }
+
+            public:
+                const ValueType* v;
+            };
+
+            template<typename Type>
+            class ArrayReverseIterator
+            {
+            public:
+                typedef Type ValueType;
+                typedef ArrayReverseIterator<Type> ArrayReverseIteratorType;
+
+                ALWAYS_INLINE constexpr ArrayReverseIterator(ValueType* v) noexcept : v(v) {}
+                ALWAYS_INLINE constexpr ArrayReverseIterator(ArrayReverseIteratorType&& other) noexcept = default;
+                ALWAYS_INLINE constexpr ArrayReverseIterator(const ArrayReverseIteratorType& other) noexcept = default;
+
+                ALWAYS_INLINE constexpr ArrayReverseIterator() noexcept = default;
+
+                ALWAYS_INLINE constexpr ArrayReverseIteratorType& operator=(ArrayReverseIteratorType&& other) noexcept = default;
+                ALWAYS_INLINE constexpr ArrayReverseIteratorType& operator=(const ArrayReverseIteratorType& other) noexcept = default;
+
+                ALWAYS_INLINE constexpr ArrayReverseIteratorType& operator+=(USize dt) noexcept { v -= dt; return *this; }
+                ALWAYS_INLINE constexpr ArrayReverseIteratorType& operator-=(USize dt) noexcept { v += dt; return *this; }
+
+                ALWAYS_INLINE constexpr ArrayReverseIteratorType& operator++() noexcept { --v; return *this; }
+                ALWAYS_INLINE constexpr ArrayReverseIteratorType operator++(int) noexcept { ArrayReverseIteratorType copy(*this); v--; return copy; }
+
+                ALWAYS_INLINE constexpr ArrayReverseIteratorType& operator--() noexcept { ++v; return *this; }
+                ALWAYS_INLINE constexpr ArrayReverseIteratorType operator--(int) noexcept { ArrayReverseIteratorType copy(*this); v++; return copy; }
+
+                ALWAYS_INLINE constexpr ArrayReverseIteratorType operator+(USize dt) const noexcept { return ArrayConstReverseIteratorType(v - dt); }
+                ALWAYS_INLINE constexpr ArrayReverseIteratorType operator-(USize dt) const noexcept { return ArrayConstReverseIteratorType(v + dt); }
+
+                ALWAYS_INLINE constexpr USize operator-(const ArrayReverseIteratorType& other) const noexcept { return v - other.v; }
+
+                ALWAYS_INLINE constexpr ValueType* operator->() const noexcept { return v; }
+                ALWAYS_INLINE constexpr ValueType& operator*() const noexcept { return *v; }
+
+                ALWAYS_INLINE constexpr ValueType& operator[](USize i) const noexcept { return v[i]; }
+
+                ALWAYS_INLINE constexpr operator ValueType*() const noexcept { return v; }
+
+                ALWAYS_INLINE constexpr bool operator==(const ArrayReverseIteratorType& other) const noexcept { return v == other.v; }
+                ALWAYS_INLINE constexpr bool operator!=(const ArrayReverseIteratorType& other) const noexcept { return v != other.v; }
+
+                ALWAYS_INLINE constexpr bool operator<(const ArrayReverseIteratorType& other) const noexcept { return v < other.v; }
+                ALWAYS_INLINE constexpr bool operator>(const ArrayReverseIteratorType& other) const noexcept { return v > other.v; }
+                ALWAYS_INLINE constexpr bool operator<=(const ArrayReverseIteratorType& other) const noexcept { return v <= other.v; }
+                ALWAYS_INLINE constexpr bool operator>=(const ArrayReverseIteratorType& other) const noexcept { return v >= other.v; }
+
+            public:
+                ValueType* v;
+            };
+        };
+    };
+
     template<typename Type, typename Allocator = Allocator<Type>>
     class Array
     {
@@ -15,196 +219,188 @@ namespace Utils
         typedef Array<Type> ArrayType;
         typedef Allocator AllocatorType;
 
-        constexpr Array() :
-            size(0), capacity(0), buff(nullptr), allocator()
+        typedef __detail::__iterator::ArrayIterator<Type> Iterator;
+        typedef __detail::__iterator::ArrayConstIterator<Type> ConstIterator;
+        typedef __detail::__iterator::ArrayReverseIterator<Type> ReverseIterator;
+        typedef __detail::__iterator::ArrayConstReverseIterator<Type> ConstReverseIterator;
+
+        constexpr Array() noexcept :
+            start(nullptr), finish(nullptr), alloc_finish(nullptr)
         {
         }
 
-        constexpr Array(USize capacity) :
-            size(0), capacity(capacity), allocator()
+        constexpr Array(USize capacity) noexcept
         {
-            buff = allocator.Allocate(capacity);
+            start = AllocatorType::Allocate(capacity);
+            finish = start;
+            alloc_finish = start + capacity;
         }
 
-        constexpr Array(ArrayType&& other) :
-            size(other.size), capacity(other.capacity), buff(other.buff), allocator(::std::move(other.allocator))
+        constexpr Array(ArrayType&& other) noexcept :
+            start(other.start), finish(other.finish), alloc_finish(other.alloc_finish)
         {
-            other.buff = nullptr;
+            other.start = nullptr;
+            other.finish = nullptr;
+            other.alloc_finish = nullptr;
         }
 
-        constexpr Array(const ArrayType& other) :
-            size(other.size), capacity(other.capacity), allocator(other.allocator)
+        constexpr Array(const ArrayType& other) noexcept
         {
-            buff = allocator.Allocate(capacity);
+            USize size = other.finish - other.start, capacity = other.alloc_finish - other.start;
+            start = AllocatorType::Allocate(capacity);
+            finish = start + size;
+            alloc_finish = start + capacity;
             for(USize i = 0; i < size; i++)
-                allocator.ConstructAt(buff + i, *(other.buff + i));
+                AllocatorType::ConstructAt(start + i, *(other.start + i));
         }
 
-        constexpr ~Array()
+        constexpr ~Array() noexcept
         {
             Cleanup();
         }
 
-        constexpr ArrayType& operator=(ArrayType&& other)
+        constexpr ArrayType& operator=(ArrayType&& other) noexcept
         { 
             Cleanup();
 
-            size = other.size; capacity = other.capacity; allocator = ::std::move(other.allocator);
-            buff = other.buff; other.buff = nullptr; 
+            start = other.start; other.start = nullptr;
+            finish = other.finish; other.finish = nullptr;
+            alloc_finish = other.alloc_finish; other.alloc_finish = nullptr;
+
+            return *this;
         }
-        constexpr ArrayType& operator=(const ArrayType& other)
+
+        constexpr ArrayType& operator=(const ArrayType& other) noexcept
         {
             Cleanup();
-
-            size = other.size; capacity = other.capacity; allocator = other.allocator;
-            buff = allocator.Allocate(capacity);
+            
+            USize size = other.finish - other.start, capacity = other.alloc_finish - other.start;
+            start = AllocatorType::Allocate(capacity);
+            finish = start + size;
+            alloc_finish = start + capacity;
             for(USize i = 0; i < size; i++)
-                allocator.ConstructAt(buff + i, *(other.buff + i));
+                AllocatorType::ConstructAt(start + i, *(other.start + i));
+            
+            return *this;
         }
 
-        constexpr void Reserve(USize capacity)
+        constexpr void Reserve(USize capacity) noexcept
         {
             Resize(capacity);
         }
-        constexpr void Shrink()
+
+        constexpr void Shrink() noexcept
         {
-            Resize(size);
+            Resize(finish - start);
         }
 
         template<typename... Args>
-        constexpr ValueType& Push(Args&&... args)
+        constexpr ValueType& Push(Args&&... args) noexcept
         {
-            if(size == capacity)
-                Resize((capacity + 1) * 3 / 2);
+            if(finish == alloc_finish)
+                Resize((finish - start + 1) * 3 / 2);
 
-            allocator.ConstructAt(size, ::std::forward(args)...);
-            return *(buff + (size++));
+            AllocatorType::ConstructAt(finish, ::std::forward<Args>(args)...);
+            return *(finish++);
         }
 
-        constexpr void PushMany(USize n, const ValueType& value = ValueType())
+        constexpr void PushMany(USize n, const ValueType& value = ValueType()) noexcept
         {
-            if(size + n > capacity)
-                Resize((size + n) * 3 / 2);
+            if(finish + n > alloc_finish)
+                Resize(((finish - start) + n) * 3 / 2);
 
-            for(USize i = 0; i < n; i++)
-                allocator.ConstructAt(size++, value);
-        }
-        
-        constexpr void Pop()
-        {
-            allocator.DestructAt(buff + (--size));
-        }
-
-        constexpr void PopMany(USize n)
-        {
-            for(USize i = 0; i < n; i++)
-                allocator.DestructAt(buff + (--size));
+            ValueType* new_finish = finish + n;
+            while(finish != new_finish)
+                AllocatorType::ConstructAt(finish++, value);
         }
         
-        constexpr void Clear()
+        constexpr void Pop() noexcept
         {
-            for(USize i = 0; i < size; i++)
-                allocator.DestructAt(buff + i);
-            size = 0;
+            AllocatorType::DestructAt(--finish);
         }
 
-        constexpr inline USize Size() const noexcept { return size; }
-        constexpr inline USize Capacity() const noexcept { return capacity; }
-        constexpr inline bool Empty() const noexcept { return size == 0; }
+        constexpr void PopMany(USize n) noexcept
+        {
+            USize new_finish = finish - n;
+            while(finish != new_finish)
+                AllocatorType::DestructAt(--finish);
+        }
+        
+        constexpr void Clear() noexcept
+        {
+            while(finish != start)
+                AllocatorType::DestructAt(--finish);
+        }
 
-        constexpr inline ValueType* Data() noexcept { return buff; }
-        constexpr inline const ValueType* Data() const noexcept { return buff; }
+        ALWAYS_INLINE constexpr Iterator Begin() noexcept { return Iterator(start); }
+        ALWAYS_INLINE constexpr Iterator End() noexcept { return Iterator(finish); }
 
-        constexpr inline ValueType& Front() noexcept { return *buff; }
-        constexpr inline const ValueType& Front() const noexcept { return *buff; }
+        ALWAYS_INLINE constexpr ConstIterator CBegin() const noexcept { return ConstIterator(start); }
+        ALWAYS_INLINE constexpr ConstIterator CEnd() const noexcept { return ConstIterator(finish); }
 
-        constexpr inline ValueType& Back() noexcept { return *(buff + size - 1); }
-        constexpr inline const ValueType& Back() const noexcept { return *(buff + size - 1); }
+        ALWAYS_INLINE constexpr ReverseIterator RBegin() const noexcept { return ReverseIterator(finish - 1); }
+        ALWAYS_INLINE constexpr ReverseIterator REnd() const noexcept { return ReverseIterator(start - 1); }
 
-        constexpr inline ValueType& operator[](USize i) { return *(buff + i); }
-        constexpr inline const ValueType& operator[](USize i) const { return *(buff + i); }
+        ALWAYS_INLINE constexpr ConstReverseIterator CRBegin() const noexcept { return ConstReverseIterator(finish - 1); }
+        ALWAYS_INLINE constexpr ConstReverseIterator CREnd() const noexcept { return ConstReverseIterator(start - 1); }
+
+        ALWAYS_INLINE constexpr USize Size() const noexcept { return finish - start; }
+        ALWAYS_INLINE constexpr USize Capacity() const noexcept { return alloc_finish - start; }
+        ALWAYS_INLINE constexpr bool Empty() const noexcept { return finish == start; }
+
+        ALWAYS_INLINE constexpr ValueType* Data() noexcept { return start; }
+        ALWAYS_INLINE constexpr const ValueType* Data() const noexcept { return start; }
+
+        ALWAYS_INLINE constexpr ValueType& Front() noexcept { return *start; }
+        ALWAYS_INLINE constexpr const ValueType& Front() const noexcept { return *start; }
+
+        ALWAYS_INLINE constexpr ValueType& Back() noexcept { return *(finish - 1); }
+        ALWAYS_INLINE constexpr const ValueType& Back() const noexcept { return *(finish - 1); }
+
+        ALWAYS_INLINE constexpr ValueType& operator[](USize i) { return *(start + i); }
+        ALWAYS_INLINE constexpr const ValueType& operator[](USize i) const { return *(start + i); }
+
+        // for C++ range for
+        ALWAYS_INLINE constexpr Iterator begin() noexcept { return Iterator(start); }
+        ALWAYS_INLINE constexpr Iterator end() noexcept { return Iterator(finish); }
+
+        ALWAYS_INLINE constexpr ConstIterator begin() const noexcept { return ConstIterator(start); }
+        ALWAYS_INLINE constexpr ConstIterator end() const noexcept { return ConstIterator(finish); }
 
     private:
-        constexpr inline void Cleanup()
+        ALWAYS_INLINE constexpr void Cleanup()
         {
-            if(buff != nullptr)
+            if(start != nullptr)
+            {
+                Clear();
+                AllocatorType::Deallocate(start, alloc_finish - start);
+            }
+        }
+
+        ALWAYS_INLINE constexpr void Resize(USize n)
+        {
+            USize size = finish - start;
+            ValueType* new_start = AllocatorType::Allocate(n);
+
+            if(start != nullptr)
             {
                 for(USize i = 0; i < size; i++)
-                    allocator.DestructAt(buff + i);
-                allocator.Deallocate(buff, capacity);
+                {
+                    AllocatorType::ConstructAt(new_start + i, ::std::move(*(start + i)));
+                    AllocatorType::DestructAt(start + i);
+                }
+                AllocatorType::Deallocate(start, alloc_finish - start);
             }
-        }
 
-        constexpr inline void Resize(USize n)
-        {
-            ValueType* new_buff = allocator.Allocate(n);
-            ::std::memcpy(new_buff, buff, size * sizeof(ValueType));
-            allocator.Deallocate(buff);
-
-            buff = new_buff;
-            capacity = n;
+            start = new_start;
+            finish = new_start + size;
+            alloc_finish = new_start + n;
         }
 
     private:
-        USize size, capacity;
-        ValueType* buff;
-        AllocatorType allocator;
-    };
-
-    namespace __deprecated
-    {
-        template<typename Type>
-        class Array
-        {
-        public:
-            typedef Type ValueType;
-            typedef Array<Type> ArrayType;
-
-            Array() = default;
-            Array(ArrayType&& other) = default;
-            Array(const ArrayType& other) = default;
-
-            Array(USize size, const ValueType& value = ValueType()) : array(size, value) {}
-
-            ~Array() = default;
-
-            ArrayType& operator=(ArrayType&& other) = default;
-            ArrayType& operator=(const ArrayType& other) = default;
-
-            inline void Reserve(USize size) { array.reserve(size); }
-            inline void Resize(USize size, const ValueType& value = ValueType()) { array.assign(size, value); }
-
-            inline void Push(const ValueType& value) { array.emplace_back(value); }
-            inline void Push(ValueType&& value) { array.emplace_back(value); }
-            inline void PushMany(USize n, const ValueType& value = ValueType()) 
-            { 
-                for(USize i = 0; i != n; i++)
-                    array.emplace_back(value);
-            }
-
-            inline void Pop() { array.pop_back(); }
-            inline void PopMany(USize n)
-            {
-                for(USize i = 0; i != n; i++)
-                    array.pop_back();
-            }
-
-            inline void Clear() { array.clear(); }
-
-            inline USize Size() const noexcept { return array.size(); }
-            inline USize Capacity() const noexcept { return array.capacity(); }
-
-            inline bool Empty() const noexcept { return array.empty(); }
-
-            inline ValueType* Data() noexcept { return array.data(); }
-            inline const ValueType* Data() const noexcept { return array.data(); }
-
-            inline ValueType& operator[](USize i) { return array[i]; }
-            inline const ValueType& operator[](USize i) const { return array[i]; }
-
-        private:
-            ::std::vector<ValueType> array;
-        };
+        ValueType* start;
+        ValueType* finish;
+        ValueType* alloc_finish;
     };
 
     template<typename Type>
@@ -291,7 +487,7 @@ namespace Utils
 
     private:
         USize offset;
-        __deprecated::Array<ValueType> array;
+        Array<ValueType> array;
     };
 };
 
