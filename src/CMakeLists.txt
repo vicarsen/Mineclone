@@ -2,8 +2,8 @@
 add_library(
   MinecloneLib
 
-  mineclone.cpp
-  ../include/mineclone.h
+  log.cpp
+  ../include/log.h
 )
 
 target_include_directories(MinecloneLib PUBLIC ../include/)

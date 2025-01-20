@@ -1,8 +1,7 @@
-#include "mineclone.h"
+#include "log.h"
 
 int main()
 {
-  say("Hello, world!\n");
   return 0;
 }
 
