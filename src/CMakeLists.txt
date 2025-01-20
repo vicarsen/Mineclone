@@ -7,6 +7,9 @@ add_library(
 
   window.cpp
   ../include/window.h
+
+  render/context.cpp
+  ../include/render/context.h
 )
 
 target_include_directories(MinecloneLib PUBLIC ../include/)

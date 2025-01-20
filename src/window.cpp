@@ -25,6 +25,7 @@ namespace mc
   void window_create(window_t *wnd, u32 width, u32 height, const char* title)
   {
     LOG_ASSERT(wnd != nullptr, Window, "Window pointer is null!");
+    LOG_ASSERT(wnd->window == nullptr, Window, "Window is already created!");
 
     wnd->window = glfwCreateWindow(width, height, title, NULL, NULL);
     LOG_ASSERT(wnd->window != nullptr, Window, "Failed to create GLFW window!");
@@ -32,6 +33,9 @@ namespace mc
 
   bool window_should_close(window_t *wnd)
   {
+    LOG_ASSERT(wnd != nullptr, Window, "Window pointer is null!");
+    LOG_ASSERT(wnd->window != nullptr, Window, "Window is already created!");
+
     return glfwWindowShouldClose(wnd->window);
   }
 
