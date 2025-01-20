@@ -4,6 +4,9 @@ add_library(
 
   log.cpp
   ../include/log.h
+
+  window.cpp
+  ../include/window.h
 )
 
 target_include_directories(MinecloneLib PUBLIC ../include/)
