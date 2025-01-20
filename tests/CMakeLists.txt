@@ -1,8 +1,8 @@
-FetchContent_Declare(
-  catch
-  GIT_REPOSITORY https://github.com/catchorg/Catch2.git
-  GIT_TAG v3.8.0
-)
 
-FetchContent_MakeAvailable(catch)
+add_executable(windowtest window.cpp)
+
+target_compile_features(windowtest PUBLIC cxx_std_20)
+target_link_libraries(windowtest PUBLIC MinecloneLib)
+
+add_test(NAME testwindowtest COMMAND windowtest)
 

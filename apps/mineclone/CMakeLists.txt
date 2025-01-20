@@ -6,5 +6,5 @@ add_executable(
 )
 
 target_link_libraries(Mineclone PUBLIC MinecloneLib)
-target_compile_definitions(Mineclone PUBLIC cxx_std_20)
+target_compile_features(Mineclone PUBLIC cxx_std_20)
 
