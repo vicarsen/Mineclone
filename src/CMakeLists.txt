@@ -8,6 +8,9 @@ add_library(
   window.cpp
   ../include/window.h
 
+  io.cpp
+  ../include/io.h
+
   render/context.cpp
   ../include/render/context.h
 )
