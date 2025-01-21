@@ -33,6 +33,7 @@ add_library(
   ${imgui_SOURCE_DIR}/backends/imgui_impl_glfw.h
 )
 
+target_compile_definitions(imgui_glfw PRIVATE GLFW_INCLUDE_NONE)
 target_link_libraries(imgui_glfw PUBLIC glfw)
 target_include_directories(imgui_glfw PUBLIC ${imgui_SOURCE_DIR})
 
