@@ -2,6 +2,7 @@
 #include "window.h"
 #include "io.h"
 #include "render/context.h"
+#include "render/imgui.h"
 
 #include <glad/gl.h>
 
@@ -27,16 +28,24 @@ int main()
 
   mc::render::context_make_current(&ctx);
 
+  mc::imgui_init(&wnd);
+
   while (!mc::window_should_close(&wnd)) {
     mc::input_preupdate(&input);
     mc::window_api_poll_events();
     mc::input_update(&input);
+    
+    mc::imgui_render();
+    ImGui::ShowDemoWindow();
 
     glClearColor(0.1f, 0.2f, 0.8f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-
+    
+    mc::imgui_present();
     glfwSwapBuffers(wnd.window);
   }
+  
+  mc::imgui_terminate();
 
   mc::render::context_destroy(&ctx);
 

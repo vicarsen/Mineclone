@@ -15,10 +15,13 @@ add_library(
 
   render/context.cpp
   ../include/render/context.h
+
+  render/imgui.cpp
+  ../include/render/imgui.h
 )
 
 target_include_directories(MinecloneLib PUBLIC ../include/)
-target_link_libraries(MinecloneLib PUBLIC spdlog glm glfw glad)
+target_link_libraries(MinecloneLib PUBLIC spdlog glm glfw glad imgui imgui_glfw imgui_opengl3)
 target_compile_features(MinecloneLib PUBLIC cxx_std_20)
 
 if (MINECLONE_TESTING)
