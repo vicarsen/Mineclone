@@ -1,4 +1,11 @@
 
+add_executable(cvartest cvar.cpp)
+
+target_compile_features(cvartest PUBLIC cxx_std_20)
+target_link_libraries(cvartest PUBLIC MinecloneLib)
+
+add_test(NAME testcvartest COMMAND cvartest)
+
 add_executable(windowtest window.cpp)
 
 target_compile_features(windowtest PUBLIC cxx_std_20)

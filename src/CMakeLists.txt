@@ -2,6 +2,8 @@
 add_library(
   MinecloneLib
 
+  ../include/cvar.h
+
   log.cpp
   ../include/log.h
 
