@@ -21,6 +21,7 @@ namespace mc
 
   void window_create(window_t *wnd, u32 width, u32 height, const char *title);
   bool window_should_close(window_t *wnd);
+  void window_swap_buffers(window_t *wnd);
   void window_destroy(window_t *wnd);
 };
 

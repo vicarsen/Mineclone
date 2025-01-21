@@ -34,9 +34,17 @@ namespace mc
   bool window_should_close(window_t *wnd)
   {
     LOG_ASSERT(wnd != nullptr, Window, "Window pointer is null!");
-    LOG_ASSERT(wnd->window != nullptr, Window, "Window is already created!");
+    LOG_ASSERT(wnd->window != nullptr, Window, "Window was never created!");
 
     return glfwWindowShouldClose(wnd->window);
+  }
+
+  void window_swap_buffers(window_t *wnd)
+  {
+    LOG_ASSERT(wnd != nullptr, Window, "Window pointer is null!");
+    LOG_ASSERT(wnd->window != nullptr, Window, "Window was never created!");
+
+    glfwSwapBuffers(wnd->window);
   }
 
   void window_destroy(window_t *wnd)

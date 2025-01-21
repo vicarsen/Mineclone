@@ -42,7 +42,7 @@ int main()
     glClear(GL_COLOR_BUFFER_BIT);
     
     mc::imgui_present();
-    glfwSwapBuffers(wnd.window);
+    mc::window_swap_buffers(&wnd);
   }
   
   mc::imgui_terminate();
