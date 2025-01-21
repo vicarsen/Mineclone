@@ -7,6 +7,8 @@ project(
   LANGUAGES C CXX
 )
 
+set(MINECLONE_TESTING FALSE CACHE BOOL "Whether or not unit tests will be run. This makes logging macros work in Release mode as well.")
+
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   set(CMAKE_CXX_EXTENSIONS OFF)
 

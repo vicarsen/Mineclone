@@ -17,7 +17,7 @@
 #define DECLARE_LOG_CATEGORY(category) namespace mc { extern std::shared_ptr<spdlog::logger> __logger__##category; };
 #define DEFINE_LOG_CATEGORY(category) namespace mc { std::shared_ptr<spdlog::logger> __logger__##category = logger_create(#category); };
 
-#ifndef NDEBUG
+#if !defined(NDEBUG) || defined(MINECLONE_TESTING)
 
 #define LOG_TRACE(category, ...) SPDLOG_LOGGER_TRACE(mc::__logger__##category, __VA_ARGS__);
 #define LOG_DEBUG(category, ...) SPDLOG_LOGGER_DEBUG(mc::__logger__##category, __VA_ARGS__);
@@ -25,7 +25,7 @@
 #define LOG_WARN(category, ...) SPDLOG_LOGGER_WARN(mc::__logger__##category, __VA_ARGS__);
 #define LOG_ERROR(category, ...) SPDLOG_LOGGER_ERROR(mc::__logger__##category, __VA_ARGS__);
 #define LOG_CRITICAL(category, ...) SPDLOG_LOGGER_CRITICAL(mc::__logger__##category, __VA_ARGS__);
-#define LOG_ASSERT(condition, category, ...) if (!(condition)) { SPDLOG_LOGGER_CRITICAL(mc::__logger__##category, __VA_ARGS__); assert(0); }
+#define LOG_ASSERT(condition, category, ...) if (!(condition)) { SPDLOG_LOGGER_CRITICAL(mc::__logger__##category, __VA_ARGS__); exit(EXIT_FAILURE); }
 
 #define LOG_TRACE_IF(condition, category, ...) if (condition) { SPDLOG_LOGGER_TRACE(mc::__logger__##category, __VA_ARGS__); }
 #define LOG_DEBUG_IF(condition, category, ...) if (condition) { SPDLOG_LOGGER_DEBUG(mc::__logger__##category, __VA_ARGS__); }

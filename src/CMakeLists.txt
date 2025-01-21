@@ -19,3 +19,7 @@ target_include_directories(MinecloneLib PUBLIC ../include/)
 target_link_libraries(MinecloneLib PUBLIC spdlog glm glfw glad)
 target_compile_features(MinecloneLib PUBLIC cxx_std_20)
 
+if (MINECLONE_TESTING)
+  target_compile_definitions(MinecloneLib PUBLIC MINECLONE_TESTING)
+endif()
+
