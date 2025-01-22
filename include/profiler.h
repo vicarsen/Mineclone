@@ -2,8 +2,13 @@
 
 #include <chrono>
 
+#ifdef MINECLONE_PROFILE
 #define PROFILE_FUNCTION() mc::scope_timer_t __func__timer__(__func__)
 #define PROFILE_SCOPE(name) mc::scope_timer_t __scope_timer__(#name)
+#else
+#define PROFILE_FUNCTION()
+#define PROFILE_SCOPE(name)
+#endif
 
 namespace mc
 {

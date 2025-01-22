@@ -3,6 +3,7 @@ add_library(
   MinecloneLib
 
   ../include/cvar.h
+  ../include/profiler.h
 
   log.cpp
   ../include/log.h
