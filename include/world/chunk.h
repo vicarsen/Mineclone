@@ -15,16 +15,16 @@ namespace mc
     bool chunk[CHUNK_FULL][CHUNK_FULL][CHUNK_FULL];
   };
 
-  typedef u16 packed_chunk_vertex_t;
+  typedef u32 packed_chunk_quad_t;
 
   struct chunk_mesh_t
   {
-    std::vector<packed_chunk_vertex_t> east;
-    std::vector<packed_chunk_vertex_t> west;
-    std::vector<packed_chunk_vertex_t> up;
-    std::vector<packed_chunk_vertex_t> down;
-    std::vector<packed_chunk_vertex_t> north;
-    std::vector<packed_chunk_vertex_t> south;
+    std::vector<packed_chunk_quad_t> east;
+    std::vector<packed_chunk_quad_t> west;
+    std::vector<packed_chunk_quad_t> up;
+    std::vector<packed_chunk_quad_t> down;
+    std::vector<packed_chunk_quad_t> north;
+    std::vector<packed_chunk_quad_t> south;
   };
 
   void chunk_generate_mesh(chunk_t *chunk, chunk_mesh_t *mesh);

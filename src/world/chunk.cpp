@@ -2,9 +2,9 @@
 
 namespace mc
 {
-  inline static packed_chunk_vertex_t __pack_vertex(u16 x, u16 y, u16 z)
+  inline static packed_chunk_quad_t __pack_quad(u32 x, u32 y, u32 z, u32 s, u32 t)
   {
-    return (x * CHUNK_FULL + y) * CHUNK_FULL + z;
+    return t | (s << 5) | (z << 10) | (y << 15) | (x << 20);
   }
 
   inline static bool __chunk_get_face_x(bool chunk[CHUNK_FULL][CHUNK_FULL][CHUNK_FULL], u32 x, u32 y, u32 z)
@@ -35,8 +35,8 @@ namespace mc
   }
 
   static void __chunk_generate_mesh_x(bool chunk[CHUNK_FULL][CHUNK_FULL][CHUNK_FULL],
-                                    std::vector<packed_chunk_vertex_t>& pos,
-                                    std::vector<packed_chunk_vertex_t>& neg,
+                                    std::vector<packed_chunk_quad_t>& pos,
+                                    std::vector<packed_chunk_quad_t>& neg,
                                     bool checked[CHUNK_FULL][CHUNK_FULL])
   {
     pos.clear();
@@ -68,15 +68,9 @@ namespace mc
             }
 
             if (face == 1) {
-              pos.push_back(__pack_vertex(x, y, z));
-              pos.push_back(__pack_vertex(x, y, z1));
-              pos.push_back(__pack_vertex(x, y1, z1));
-              pos.push_back(__pack_vertex(x, y1, z));
+              pos.push_back(__pack_quad(x, y, z, y1 - y, z1 - z));
             } else {
-              neg.push_back(__pack_vertex(x, y, z));
-              neg.push_back(__pack_vertex(x, y1, z));
-              neg.push_back(__pack_vertex(x, y1, z1));
-              neg.push_back(__pack_vertex(x, y, z1));
+              neg.push_back(__pack_quad(x, y, z, y1 - y, z1 - z));
             }
           }
         }
@@ -112,8 +106,8 @@ namespace mc
   }
 
   static void __chunk_generate_mesh_y(bool chunk[CHUNK_FULL][CHUNK_FULL][CHUNK_FULL],
-                                    std::vector<packed_chunk_vertex_t>& pos,
-                                    std::vector<packed_chunk_vertex_t>& neg,
+                                    std::vector<packed_chunk_quad_t>& pos,
+                                    std::vector<packed_chunk_quad_t>& neg,
                                     bool checked[CHUNK_FULL][CHUNK_FULL])
   {
     pos.clear();
@@ -145,15 +139,9 @@ namespace mc
             }
 
             if (face == 1) {
-              pos.push_back(__pack_vertex(x, y, z));
-              pos.push_back(__pack_vertex(x1, y, z));
-              pos.push_back(__pack_vertex(x1, y, z1));
-              pos.push_back(__pack_vertex(x, y, z1));
+              pos.push_back(__pack_quad(x, y, z, x1 - x, z1 - z));
             } else {
-              neg.push_back(__pack_vertex(x, y, z));
-              neg.push_back(__pack_vertex(x, y, z1));
-              neg.push_back(__pack_vertex(x1, y, z1));
-              neg.push_back(__pack_vertex(x1, y, z));
+              neg.push_back(__pack_quad(x, y, z, x1 - x, z1 - z));
             }
           }
         }
@@ -189,8 +177,8 @@ namespace mc
   }
 
   static void __chunk_generate_mesh_z(bool chunk[CHUNK_FULL][CHUNK_FULL][CHUNK_FULL],
-                                    std::vector<packed_chunk_vertex_t>& pos,
-                                    std::vector<packed_chunk_vertex_t>& neg,
+                                    std::vector<packed_chunk_quad_t>& pos,
+                                    std::vector<packed_chunk_quad_t>& neg,
                                     bool checked[CHUNK_FULL][CHUNK_FULL])
   {
     pos.clear();
@@ -222,15 +210,9 @@ namespace mc
             }
 
             if (face == 1) {
-              pos.push_back(__pack_vertex(x, y, z));
-              pos.push_back(__pack_vertex(x1, y, z));
-              pos.push_back(__pack_vertex(x1, y1, z));
-              pos.push_back(__pack_vertex(x, y1, z));
+              pos.push_back(__pack_quad(x, y, z, x1 - x, y1 - y));
             } else {
-              neg.push_back(__pack_vertex(x, y, z));
-              neg.push_back(__pack_vertex(x, y1, z));
-              neg.push_back(__pack_vertex(x1, y1, z));
-              neg.push_back(__pack_vertex(x1, y, z));
+              neg.push_back(__pack_quad(x, y, z, x1 - x, y1 - y));
             }
           }
         }
