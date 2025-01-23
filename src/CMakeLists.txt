@@ -19,6 +19,9 @@ add_library(
 
   render/imgui.cpp
   ../include/render/imgui.h
+
+  world/chunk.cpp
+  ../include/world/chunk.h
 )
 
 target_include_directories(MinecloneLib PUBLIC ../include/)
