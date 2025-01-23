@@ -22,6 +22,9 @@ add_library(
 
   world/chunk.cpp
   ../include/world/chunk.h
+
+  render/chunk.cpp
+  ../include/render/chunk.h
 )
 
 target_include_directories(MinecloneLib PUBLIC ../include/)

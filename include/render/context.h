@@ -3,6 +3,8 @@
 #include "log.h"
 #include "window.h"
 
+#include <glad/gl.h>
+
 DECLARE_LOG_CATEGORY(Render);
 
 namespace mc
