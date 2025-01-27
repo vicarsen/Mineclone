@@ -26,6 +26,9 @@ add_library(
   render/buffer.cpp
   ../include/render/buffer.h
 
+  render/shader.cpp
+  ../include/render/shader.h
+
   render/world.cpp
   ../include/render/world.h
 )
