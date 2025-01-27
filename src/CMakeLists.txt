@@ -23,8 +23,8 @@ add_library(
   world/chunk.cpp
   ../include/world/chunk.h
 
-  render/chunk.cpp
-  ../include/render/chunk.h
+  render/buffer.cpp
+  ../include/render/buffer.h
 
   render/world.cpp
   ../include/render/world.h

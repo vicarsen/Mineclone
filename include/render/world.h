@@ -3,7 +3,7 @@
 #include "types.h"
 
 #include "world/chunk.h"
-#include "render/chunk.h"
+#include "render/buffer.h"
 
 #include <glm/glm.hpp>
 
@@ -27,7 +27,20 @@ namespace mc
         glm::ivec3 origin;
       };
 
-      chunk_allocator_t allocator;
+      struct ssbo_element_t
+      {
+        glm::ivec4 position;
+      };
+
+      struct indirect_command_t
+      {
+        GLuint count;
+        GLuint instance_count;
+        GLuint first_vertex;
+        GLuint base_instance;
+      };
+
+      buffer_t faces, ssbo, indirect;
       chunk_mesh_generator_fn generator;
       std::vector<lod_t> lods;
     };
