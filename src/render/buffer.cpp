@@ -14,7 +14,7 @@ namespace mc
       glNamedBufferStorage(buffer->buffer, size, NULL, GL_DYNAMIC_STORAGE_BIT);
     }
 
-    void chunk_allocator_write(buffer_t *buffer, usize offset, usize size, const void *data)
+    void buffer_write(buffer_t *buffer, usize offset, usize size, const void *data)
     {
       LOG_ASSERT(buffer != nullptr, Render, "Buffer pointer is null!");
       LOG_ASSERT(buffer->buffer != 0, Render, "Buffer was never created!");
