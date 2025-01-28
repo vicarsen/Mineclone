@@ -9,6 +9,7 @@ project(
 
 set(MINECLONE_TESTING ON CACHE BOOL "Whether or not unit tests will be run. This makes logging macros work in Release mode as well.")
 set(MINECLONE_PROFILE ON CACHE BOOL "Whether or not to register profiling data.")
+set(MINECLONE_DEBUG ON CACHE BOOL "Whether or not in debug mode.")
 
 if(CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   set(CMAKE_CXX_EXTENSIONS OFF)

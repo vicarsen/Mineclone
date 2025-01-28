@@ -14,6 +14,9 @@ add_library(
   io.cpp
   ../include/io.h
 
+  files/assets.cpp
+  ../include/files/assets.h
+
   render/context.cpp
   ../include/render/context.h
 
@@ -36,6 +39,10 @@ add_library(
 target_include_directories(MinecloneLib PUBLIC ../include/)
 target_link_libraries(MinecloneLib PUBLIC spdlog glm glfw glad imgui imgui_glfw imgui_opengl3)
 target_compile_features(MinecloneLib PUBLIC cxx_std_20)
+
+if (MINECLONE_DEBUG)
+  target_compile_definitions(MinecloneLib PUBLIC ASSETS_PATH=\"${Mineclone_SOURCE_DIR}/assets\")
+endif()
 
 if (MINECLONE_TESTING)
   target_compile_definitions(MinecloneLib PUBLIC MINECLONE_TESTING)
