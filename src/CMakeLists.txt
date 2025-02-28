@@ -3,6 +3,7 @@ set(
   HEADER_LIST
   "../include/mineclonelib/log.h"
   "../include/mineclonelib/cvar.h"
+  "../include/mineclonelib/misc.h"
 )
 
 add_library(
