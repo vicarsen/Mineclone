@@ -61,6 +61,36 @@
 #define LOG_ASSERT(category, condition, ...)
 #endif
 
+#define LOG_TRACE_IF(category, condition, ...)    \
+	if (condition) {                          \
+		LOG_TRACE(category, __VA_ARGS__); \
+	}
+
+#define LOG_DEBUG_IF(category, condition, ...)    \
+	if (condition) {                          \
+		LOG_DEBUG(category, __VA_ARGS__); \
+	}
+
+#define LOG_INFO_IF(category, condition, ...)    \
+	if (condition) {                         \
+		LOG_INFO(category, __VA_ARGS__); \
+	}
+
+#define LOG_WARN_IF(category, condition, ...)    \
+	if (condition) {                         \
+		LOG_WARN(category, __VA_ARGS__); \
+	}
+
+#define LOG_ERROR_IF(category, condition, ...)    \
+	if (condition) {                          \
+		LOG_ERROR(category, __VA_ARGS__); \
+	}
+
+#define LOG_CRITICAL_IF(category, condition, ...)    \
+	if (condition) {                             \
+		LOG_CRITICAL(category, __VA_ARGS__); \
+	}
+
 DECLARE_LOG_CATEGORY(Default);
 
 namespace mc
