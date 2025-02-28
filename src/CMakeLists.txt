@@ -2,12 +2,14 @@
 set(
   HEADER_LIST
   "../include/mineclonelib/log.h"
+  "../include/mineclonelib/cvar.h"
 )
 
 add_library(
   mineclonelib
 
   log.cpp
+  cvar.cpp
 
   ${HEADER_LIST}
 )
