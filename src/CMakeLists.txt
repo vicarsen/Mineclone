@@ -8,6 +8,12 @@ set(
   "../include/mineclonelib/io/keys.h"
   "../include/mineclonelib/io/input.h"
   "../include/mineclonelib/io/window.h"
+
+  "../include/mineclonelib/render/context.h"
+
+  "../include/mineclonelib/render/gl/context.h"
+
+  "../include/mineclonelib/render/vk/context.h"
 )
 
 add_library(
@@ -18,6 +24,12 @@ add_library(
 
   io/input.cpp
   io/window.cpp
+
+  render/context.cpp
+
+  render/gl/context.cpp
+
+  render/vk/context.cpp
 
   ${HEADER_LIST}
 )

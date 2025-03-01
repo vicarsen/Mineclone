@@ -4,10 +4,9 @@
 #include <mineclonelib/io/input.h>
 #include <mineclonelib/io/window.h>
 
-#include <glm/glm.hpp>
+#include <mineclonelib/render/context.h>
 
-#include <glad/gl.h>
-#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
 
 static mc::cvar<const char *> app_name("Mineclone", "app/name",
 				       "The name of the application");
@@ -44,15 +43,14 @@ int main()
 	window.emplace(window_title.get(), window_size.get().x,
 		       window_size.get().y);
 
-	glfwMakeContextCurrent(window->get_handle());
-
-	LOG_ASSERT(Default, gladLoadGL((GLADloadfunc)glfwGetProcAddress),
-		   "Failed to load OpenGL");
-
 	std::optional<mc::input_manager> input;
 	input.emplace();
 
 	window->add_input_handler(&input.value());
+
+	std::unique_ptr<mc::render::context> context =
+		mc::render::context::create(mc::render::render_api::opengl,
+					    &window.value());
 
 	while (!window->should_close()) {
 		input->preupdate();
@@ -88,11 +86,11 @@ int main()
 				 scroll.y);
 		}
 
-		glClearColor(0.1f, 0.2f, 0.8f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT);
-
-		glfwSwapBuffers(window->get_handle());
+		context->begin();
+		context->present();
 	}
+
+	context.reset();
 
 	window->remove_input_handler(&input.value());
 	input.reset();
