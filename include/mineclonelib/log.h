@@ -58,7 +58,11 @@
 		exit(1);                                           \
 	}
 #else
-#define LOG_ASSERT(category, condition, ...)
+#define LOG_ASSERT(category, condition, ...)                       \
+	if (!(condition)) {                                        \
+		SPDLOG_LOGGER_CRITICAL(::mc::__logger__##category, \
+				       __VA_ARGS__);               \
+	}
 #endif
 
 #define LOG_TRACE_IF(category, condition, ...)    \
