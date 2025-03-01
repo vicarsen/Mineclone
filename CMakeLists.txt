@@ -4,7 +4,7 @@ project(
   Mineclone
   VERSION 0.1.0
   DESCRIPTION "A Minecraft clone written over the course of university"
-  LANGUAGES CXX
+  LANGUAGES C CXX
 )
 
 if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)

@@ -19,3 +19,5 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(spdlog glm glfw)
 
+add_subdirectory(glad)
+

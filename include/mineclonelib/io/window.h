@@ -8,6 +8,8 @@ struct GLFWwindow;
 
 namespace mc
 {
+class input_handler;
+
 class window {
     public:
 	static void init();
@@ -18,6 +20,9 @@ class window {
 	window(const char *title, int width, int height);
 	~window();
 
+	void add_input_handler(input_handler *handler);
+	void remove_input_handler(input_handler *handler);
+
 	bool should_close() const;
 
 	inline GLFWwindow *get_handle() const noexcept
@@ -26,6 +31,16 @@ class window {
 	}
 
     private:
+	static void key_callback(GLFWwindow *window, int key, int scancode,
+				 int action, int mods);
+	static void button_callback(GLFWwindow *window, int button, int action,
+				    int mods);
+	static void cursor_callback(GLFWwindow *window, double x, double y);
+	static void scroll_callback(GLFWwindow *window, double xoffset,
+				    double yoffset);
+
+    private:
 	GLFWwindow *m_window;
+	std::vector<input_handler *> m_input_handlers;
 };
 }
