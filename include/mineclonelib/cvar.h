@@ -45,6 +45,16 @@ template <typename tp> class cvars {
 		return it->second;
 	}
 
+	value_type find_or(const char *name, value_type other) const
+	{
+		auto it = m_cvars.find(name);
+		if (it == m_cvars.end()) {
+			return other;
+		}
+
+		return it->second->get();
+	}
+
     private:
 	~cvars() = default;
 
