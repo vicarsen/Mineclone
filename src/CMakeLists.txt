@@ -4,6 +4,8 @@ set(
   "../include/mineclonelib/log.h"
   "../include/mineclonelib/cvar.h"
   "../include/mineclonelib/misc.h"
+
+  "../include/mineclonelib/io/window.h"
 )
 
 add_library(
@@ -12,11 +14,13 @@ add_library(
   log.cpp
   cvar.cpp
 
+  io/window.cpp
+
   ${HEADER_LIST}
 )
 
 target_include_directories(mineclonelib PUBLIC ../include)
-target_link_libraries(mineclonelib PUBLIC spdlog)
+target_link_libraries(mineclonelib PUBLIC spdlog glm glfw)
 target_compile_features(mineclonelib PUBLIC cxx_std_20)
 
 source_group(
