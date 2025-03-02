@@ -13,9 +13,6 @@ class gl_context : public context {
 
 	virtual void begin() override;
 	virtual void present() override;
-
-    private:
-	GLFWwindow *m_ctx;
 };
 }
 }

@@ -1,0 +1,15 @@
+#pragma once
+
+#include <glad/vulkan.h>
+
+using VkPipelineRenderingCreateInfoKHR = VkPipelineRenderingCreateInfo;
+using PFN_vkCmdBeginRenderingKHR = PFN_vkCmdBeginRendering;
+using PFN_vkCmdEndRenderingKHR = PFN_vkCmdEndRendering;
+
+#define VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO_KHR \
+	VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO
+
+#define VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO_KHR \
+	VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO
+
+#define VK_STRUCTURE_TYPE_RENDERING_INFO_KHR VK_STRUCTURE_TYPE_RENDERING_INFO

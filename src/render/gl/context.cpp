@@ -8,9 +8,9 @@ namespace mc
 namespace render
 {
 gl_context::gl_context(mc::window *window)
+	: context(window)
 {
-	m_ctx = window->get_handle();
-	glfwMakeContextCurrent(m_ctx);
+	glfwMakeContextCurrent(m_window->get_handle());
 
 	LOG_ASSERT(Render, gladLoadGL(glfwGetProcAddress),
 		   "Failed to load OpenGL");
@@ -18,7 +18,7 @@ gl_context::gl_context(mc::window *window)
 
 gl_context::~gl_context()
 {
-	if (glfwGetCurrentContext() == m_ctx) {
+	if (glfwGetCurrentContext() == m_window->get_handle()) {
 		glfwMakeContextCurrent(nullptr);
 	}
 }
@@ -31,7 +31,7 @@ void gl_context::begin()
 
 void gl_context::present()
 {
-	glfwSwapBuffers(m_ctx);
+	glfwSwapBuffers(m_window->get_handle());
 }
 }
 }

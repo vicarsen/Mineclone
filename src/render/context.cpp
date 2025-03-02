@@ -8,6 +8,11 @@ namespace mc
 {
 namespace render
 {
+context::context(window *wnd)
+	: m_window(wnd)
+{
+}
+
 std::unique_ptr<context> context::create(mc::window *window)
 {
 	switch (window->get_api()) {

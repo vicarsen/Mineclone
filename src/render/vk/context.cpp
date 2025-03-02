@@ -67,10 +67,10 @@ namespace mc
 {
 namespace render
 {
-vk_context::vk_context(mc::window *window)
+vk_context::vk_context(mc::window *wnd)
+	: context(wnd)
 {
-	m_window = window;
-	window->add_input_handler(this);
+	m_window->add_input_handler(this);
 
 	create_instance();
 	create_messenger();

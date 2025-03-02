@@ -10,10 +10,13 @@ set(
   "../include/mineclonelib/io/window.h"
 
   "../include/mineclonelib/render/context.h"
+  "../include/mineclonelib/render/gui.h"
 
   "../include/mineclonelib/render/gl/context.h"
+  "../include/mineclonelib/render/gl/gui.h"
 
   "../include/mineclonelib/render/vk/context.h"
+  "../include/mineclonelib/render/vk/gui.h"
 )
 
 add_library(
@@ -26,16 +29,19 @@ add_library(
   io/window.cpp
 
   render/context.cpp
+  render/gui.cpp
 
   render/gl/context.cpp
+  render/gl/gui.cpp
 
   render/vk/context.cpp
+  render/vk/gui.cpp
 
   ${HEADER_LIST}
 )
 
 target_include_directories(mineclonelib PUBLIC ../include)
-target_link_libraries(mineclonelib PUBLIC spdlog glm glfw glad)
+target_link_libraries(mineclonelib PUBLIC spdlog glm glfw glad imgui imgui_glfw imgui_opengl3 imgui_vulkan)
 target_compile_features(mineclonelib PUBLIC cxx_std_20)
 
 source_group(

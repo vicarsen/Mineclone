@@ -5,8 +5,10 @@
 #include <mineclonelib/io/window.h>
 
 #include <mineclonelib/render/context.h>
+#include <mineclonelib/render/gui.h>
 
 #include <glm/glm.hpp>
+#include <imgui.h>
 
 static mc::cvar<const char *> app_name("Mineclone", "app/name",
 				       "The name of the application");
@@ -55,15 +57,24 @@ int main()
 	std::unique_ptr<mc::render::context> context =
 		mc::render::context::create(&window.value());
 
+	std::unique_ptr<mc::render::gui_context> gui_ctx =
+		mc::render::gui_context::create(context.get());
+
 	while (!window->should_close()) {
 		input->preupdate();
 		mc::window::poll_events();
 		input->update();
 
 		context->begin();
+
+		gui_ctx->begin();
+		ImGui::ShowDemoWindow();
+		gui_ctx->present();
+
 		context->present();
 	}
 
+	gui_ctx.reset();
 	context.reset();
 
 	window->remove_input_handler(&input.value());

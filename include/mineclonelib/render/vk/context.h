@@ -11,13 +11,68 @@ namespace render
 {
 class vk_context : public context, public input_handler {
     public:
-	vk_context(mc::window *window);
+	vk_context(window *wnd);
 	virtual ~vk_context();
 
 	virtual void begin() override;
 	virtual void present() override;
 
 	virtual void framebuffer_callback(int width, int height) override;
+
+	inline VkInstance get_instance() const noexcept
+	{
+		return m_instance;
+	}
+
+	inline VkSurfaceKHR get_surface() const noexcept
+	{
+		return m_surface;
+	}
+
+	inline VkPhysicalDevice get_physical_device() const noexcept
+	{
+		return m_gpu;
+	}
+
+	inline VkDevice get_device() const noexcept
+	{
+		return m_device;
+	}
+
+	inline uint32_t get_graphics_idx() const noexcept
+	{
+		return m_graphics_idx;
+	}
+
+	inline VkQueue get_graphics_queue() const noexcept
+	{
+		return m_graphics;
+	}
+
+	inline VkSwapchainKHR get_swapchain() const noexcept
+	{
+		return m_swapchain;
+	}
+
+	inline VkRenderPass get_render_pass() const noexcept
+	{
+		return m_render_pass;
+	}
+
+	inline uint32_t get_image_count() const noexcept
+	{
+		return m_swapchain_frames.size();
+	}
+
+	inline VkCommandBuffer get_command_buffer() const noexcept
+	{
+		return m_frames[m_current_frame].command_buffer;
+	}
+
+	inline bool is_minimized() const noexcept
+	{
+		return m_minimized;
+	}
 
     private:
 	void create_instance();
@@ -35,8 +90,6 @@ class vk_context : public context, public input_handler {
 
     private:
 	const int m_frames_in_flight = 2;
-
-	window *m_window;
 
 	VkInstance m_instance;
 	VkDebugUtilsMessengerEXT m_messenger;
