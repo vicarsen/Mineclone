@@ -3,6 +3,7 @@
 #include "mineclonelib/cvar.h"
 #include "mineclonelib/misc.h"
 
+#define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
 #ifndef NDEBUG
