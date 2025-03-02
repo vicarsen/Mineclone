@@ -1,7 +1,6 @@
 #include "mineclonelib/render/gui.h"
 #include "mineclonelib/render/vk/gui.h"
 #include "mineclonelib/render/vk/context.h"
-#include <vulkan/vulkan_core.h>
 
 #include <imgui.h>
 #include <backends/custom/imgui_impl_vulkan.h>
