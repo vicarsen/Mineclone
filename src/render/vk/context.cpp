@@ -6,6 +6,8 @@
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
+#include <algorithm>
+
 #ifndef NDEBUG
 static mc::cvar<bool> vulkan_validation(
 	true, "render/vulkan/validation",
