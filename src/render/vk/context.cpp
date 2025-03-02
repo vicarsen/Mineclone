@@ -457,6 +457,10 @@ void vk_context::choose_gpu()
 
 	LOG_ASSERT(Render, gladLoaderLoadVulkan(m_instance, m_gpu, NULL),
 		   "Failed to reload Vulkan with instance");
+
+	VkPhysicalDeviceProperties properties;
+	vkGetPhysicalDeviceProperties(m_gpu, &properties);
+	vulkan_physical_device.set(properties.deviceName);
 }
 
 void vk_context::create_device()
