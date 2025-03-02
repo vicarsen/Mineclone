@@ -21,6 +21,9 @@ class input_handler {
 	virtual void scroll_callback(float offsetx, float offsety)
 	{
 	}
+	virtual void framebuffer_callback(int width, int height)
+	{
+	}
 };
 
 class input_manager : public input_handler {

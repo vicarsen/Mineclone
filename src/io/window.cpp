@@ -1,7 +1,10 @@
 #include "mineclonelib/io/window.h"
 #include "mineclonelib/io/input.h"
 #include "mineclonelib/io/keys.h"
+
 #include "mineclonelib/log.h"
+#include "mineclonelib/cvar.h"
+#include "mineclonelib/render/render.h"
 
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
@@ -27,6 +30,22 @@ void window::terminate()
 
 window::window(const char *title, int width, int height)
 {
+	m_api = cvars<render::render_api>::get()->find_or(
+		"render/api", render::render_api::vulkan);
+
+	switch (m_api) {
+	case render::render_api::vulkan:
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		break;
+	case render::render_api::opengl:
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+		break;
+	case render::render_api::none:
+	default:
+		glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+		break;
+	}
+
 	m_window = glfwCreateWindow(width, height, title, NULL, NULL);
 	if (m_window == nullptr) {
 		LOG_CRITICAL(Window, "Failed to create window");

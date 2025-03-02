@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mineclonelib/log.h"
+#include "mineclonelib/render/render.h"
 
 DECLARE_LOG_CATEGORY(Window);
 
@@ -25,6 +26,11 @@ class window {
 
 	bool should_close() const;
 
+	inline render::render_api get_api() const noexcept
+	{
+		return m_api;
+	}
+
 	inline GLFWwindow *get_handle() const noexcept
 	{
 		return m_window;
@@ -40,6 +46,7 @@ class window {
 				    double yoffset);
 
     private:
+	render::render_api m_api;
 	GLFWwindow *m_window;
 	std::vector<input_handler *> m_input_handlers;
 };

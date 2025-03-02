@@ -8,9 +8,9 @@ namespace mc
 {
 namespace render
 {
-std::unique_ptr<context> context::create(render_api api, mc::window *window)
+std::unique_ptr<context> context::create(mc::window *window)
 {
-	switch (api) {
+	switch (window->get_api()) {
 	case render_api::opengl:
 		return std::make_unique<gl_context>(window);
 	case render_api::vulkan:

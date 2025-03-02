@@ -11,8 +11,6 @@ namespace mc
 {
 namespace render
 {
-enum class render_api { none = 0, opengl, vulkan };
-
 class context {
     public:
 	virtual ~context() = default;
@@ -20,8 +18,7 @@ class context {
 	virtual void begin() = 0;
 	virtual void present() = 0;
 
-	static std::unique_ptr<context> create(render_api api,
-					       mc::window *window);
+	static std::unique_ptr<context> create(mc::window *window);
 };
 }
 }
