@@ -1,8 +1,10 @@
 #include "mineclonelib/render/gl/gui.h"
-
-#include "GLFW/glfw3.h"
-#include "imgui.h"
 #include "mineclonelib/render/gui.h"
+
+#define GLFW_INCLUDE_NONE
+#include <GLFW/glfw3.h>
+
+#include <imgui.h>
 #include <backends/imgui_impl_opengl3.h>
 
 namespace mc
