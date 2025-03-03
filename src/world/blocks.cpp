@@ -43,11 +43,13 @@ class simple_face : public face {
 
 class simple_block : public block {
     public:
-	simple_block(face_id face)
+	simple_block(face_id face, bool opaque = true)
 	{
 		for (int i = 0; i < 6; i++) {
 			m_faces[i] = face;
 		}
+
+		m_opaque = opaque;
 	}
 
 	simple_block(face_id east, face_id west, face_id up, face_id down,
@@ -85,7 +87,7 @@ block_registry *get_registry()
 }
 
 block_id air = get_registry()->register_block(
-	std::make_unique<simple_block>(faces::air));
+	std::make_unique<simple_block>(faces::air, false));
 block_id dirt = get_registry()->register_block(
 	std::make_unique<simple_block>(faces::dirt));
 }

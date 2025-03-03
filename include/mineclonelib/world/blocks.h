@@ -54,8 +54,14 @@ class block {
 		return m_faces[static_cast<int>(face)];
 	}
 
+	inline bool is_opaque() const noexcept
+	{
+		return m_opaque;
+	}
+
     protected:
 	face_id m_faces[6];
+	bool m_opaque;
 };
 
 class block_registry {
