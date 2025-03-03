@@ -7,6 +7,8 @@ project(
   LANGUAGES C CXX
 )
 
+set(MINECLONE_DEBUG ON CACHE BOOL "Whether or not in debug mode.")
+
 if (CMAKE_PROJECT_NAME STREQUAL PROJECT_NAME)
   set(CMAKE_CXX_EXTENSIONS OFF)
   
