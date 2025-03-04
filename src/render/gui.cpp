@@ -67,7 +67,7 @@ std::unique_ptr<gui_context> gui_context::create(context *ctx)
 	case render::render_api::none:
 		LOG_CRITICAL(
 			Render,
-			"Failed to create context: render_api::none currently not supported");
+			"Failed to create gui_context: render_api::none currently not supported");
 		return nullptr;
 	default:
 		return nullptr;
