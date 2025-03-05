@@ -1,3 +1,4 @@
+#include "glm/ext/matrix_transform.hpp"
 #include <mineclonelib/cvar.h>
 #include <mineclonelib/misc.h>
 #include <mineclonelib/transform.h>
@@ -68,14 +69,14 @@ int main()
 
 	mc::world::chunk chunk;
 
-	for (int i = 1; i <= 17; i++) {
-		for (int j = 1; j <= 17; j++) {
-			for (int k = 1; k <= 17; k++) {
-				int dx = (i - 9) * (i - 9);
-				int dy = (j - 9) * (j - 9);
-				int dz = (k - 9) * (k - 9);
+	for (int i = 1; i <= 63; i++) {
+		for (int j = 1; j <= 63; j++) {
+			for (int k = 1; k <= 63; k++) {
+				int dx = (i - 32) * (i - 32);
+				int dy = (j - 32) * (j - 32);
+				int dz = (k - 32) * (k - 32);
 
-				if (dx + dy + dz <= 8 * 8) {
+				if (dx + dy + dz <= 23 * 23) {
 					chunk.set(i, j, k,
 						  mc::world::blocks::dirt);
 				}
@@ -88,13 +89,24 @@ int main()
 	std::unique_ptr<mc::render::world_renderer> world_renderer =
 		mc::render::world_renderer::create(context.get());
 
-	mc::render::chunk_handle mesh = world_renderer->alloc_chunk();
-	world_renderer->upload_chunk(mesh, &draw_data, glm::mat4(1.0f));
+	const int dim = 16;
+	mc::render::chunk_handle chunks[dim][dim];
+	for (int i = 0; i < dim; i++) {
+		for (int j = 0; j < dim; j++) {
+			chunks[i][j] = world_renderer->alloc_chunk();
+		}
+	}
 
-	mc::render::chunk_handle mesh2 = world_renderer->alloc_chunk();
-	world_renderer->upload_chunk(mesh2, &draw_data,
-				     glm::translate(glm::mat4(1.0f),
-						    { 32.0f, 0.0f, 0.0f }));
+	for (int i = 0; i < dim; i++) {
+		for (int j = 0; j < dim; j++) {
+			glm::mat4 model = glm::translate(
+				glm::mat4(1.0f),
+				glm::vec3(i * CHUNK_SIZE, 0, j * CHUNK_SIZE));
+
+			world_renderer->upload_chunk(chunks[i][j], &draw_data,
+						     model);
+		}
+	}
 
 	mc::transform camera;
 
@@ -113,6 +125,14 @@ int main()
 		}
 
 		if (window->get_cursor() == mc::cursor_mode::hidden) {
+			float scroll = input->get_scroll().y;
+
+			if (scroll > 0) {
+				speed *= 1.0f + 1.0f / scroll;
+			} else if (scroll < 0) {
+				speed /= 1.0f - 1.0f / scroll;
+			}
+
 			camera.rotation().x = glm::clamp(
 				camera.rotation().x -
 					input->get_cursor_delta().y *

@@ -94,6 +94,7 @@ gl_context::gl_context(mc::window *window)
 
 	glEnable(GL_DEPTH_TEST);
 	glEnable(GL_CULL_FACE);
+	glEnable(GL_MULTISAMPLE);
 
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CW);

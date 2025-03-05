@@ -90,10 +90,20 @@ gl_world_renderer::gl_world_renderer(context *ctx)
 
 	glTextureParameteri(m_texarray, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
 	glTextureParameteri(m_texarray, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-	glTextureParameteri(m_texarray, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+	glTextureParameteri(m_texarray, GL_TEXTURE_MIN_FILTER,
+			    GL_NEAREST_MIPMAP_LINEAR);
 	glTextureParameteri(m_texarray, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
-	glTextureStorage3D(m_texarray, 1, GL_RGBA8, 32, 32, freg->size());
+	float aniso = 0.0f;
+	glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &aniso);
+	glTextureParameterf(m_texarray, GL_TEXTURE_MAX_ANISOTROPY, aniso);
+
+	LOG_INFO(
+		Render,
+		"Enabled OpenGL anisotropic filtering for voxel textures up to {}",
+		aniso);
+
+	glTextureStorage3D(m_texarray, 6, GL_RGBA8, 32, 32, freg->size());
 	for (uint32_t i = 0; i < freg->size(); i++) {
 		world::face *face = freg->get(i);
 		const char *path = face->get_texture();
@@ -113,6 +123,8 @@ gl_world_renderer::gl_world_renderer(context *ctx)
 
 		stbi_image_free(data);
 	}
+
+	glGenerateTextureMipmap(m_texarray);
 
 	m_program = glCreateProgram();
 

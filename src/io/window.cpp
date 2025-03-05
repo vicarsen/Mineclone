@@ -39,6 +39,7 @@ window::window(const char *title, int width, int height)
 		break;
 	case render::render_api::opengl:
 		glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
+		glfwWindowHint(GLFW_SAMPLES, 8);
 		break;
 	case render::render_api::none:
 	default:
