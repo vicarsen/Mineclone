@@ -19,6 +19,7 @@ FetchContent_Declare(
 
 FetchContent_MakeAvailable(spdlog glm glfw)
 
+add_subdirectory(stb_image)
 add_subdirectory(glad)
 add_subdirectory(imgui)
 

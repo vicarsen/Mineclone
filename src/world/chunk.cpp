@@ -5,6 +5,17 @@ namespace mc
 {
 namespace world
 {
+chunk::chunk()
+{
+	for (int i = 0; i < CHUNK_TOTAL; i++) {
+		for (int j = 0; j < CHUNK_TOTAL; j++) {
+			for (int k = 0; k < CHUNK_TOTAL; k++) {
+				m_blocks[i][j][k] = blocks::air;
+			}
+		}
+	}
+}
+
 // Precalculated ambient occlusion data.
 // Mask = abcdefghi
 // a b c
@@ -58,13 +69,13 @@ chunk_draw_data simple_chunk_draw_data_generator::generate(chunk *ch)
 	static const int dy[] = { 0, 0, 1, -1, 0, 0 };
 	static const int dz[] = { 0, 0, 0, 0, 1, -1 };
 
-	static const int dleftx[] = { 0, 0, 0, 0, 1, -1 };
-	static const int dlefty[] = { 1, -1, 0, 0, 0, 0 };
-	static const int dleftz[] = { 0, 0, 1, -1, 0, 0 };
+	static const int dleftx[] = { 0, 0, 0, -1, -1, 0 };
+	static const int dlefty[] = { -1, 0, 0, 0, 0, -1 };
+	static const int dleftz[] = { 0, -1, -1, 0, 0, 0 };
 
-	static const int dtopx[] = { 0, 0, 1, -1, 0, 0 };
-	static const int dtopy[] = { 0, 0, 0, 0, 1, -1 };
-	static const int dtopz[] = { 1, -1, 0, 0, 0, 0 };
+	static const int dtopx[] = { 0, 0, 1, 0, 0, 1 };
+	static const int dtopy[] = { 0, 1, 0, 0, 1, 0 };
+	static const int dtopz[] = { 1, 0, 0, 1, 0, 0 };
 
 	chunk_draw_data data;
 

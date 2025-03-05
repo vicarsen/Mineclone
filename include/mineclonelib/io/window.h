@@ -9,6 +9,8 @@ struct GLFWwindow;
 
 namespace mc
 {
+enum class cursor_mode { normal = 0, hidden };
+
 class input_handler;
 
 class window {
@@ -23,6 +25,10 @@ class window {
 
 	void add_input_handler(input_handler *handler);
 	void remove_input_handler(input_handler *handler);
+
+	void set_cursor(cursor_mode mode);
+	cursor_mode get_cursor() const;
+	void toggle_cursor();
 
 	bool should_close() const;
 
@@ -51,5 +57,7 @@ class window {
 	render::render_api m_api;
 	GLFWwindow *m_window;
 	std::vector<input_handler *> m_input_handlers;
+
+	cursor_mode m_cursor;
 };
 }

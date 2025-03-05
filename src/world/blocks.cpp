@@ -34,11 +34,11 @@ class simple_face : public face {
 
 	virtual const char *get_texture() const override
 	{
-		return m_texture.c_str();
+		return m_texture;
 	}
 
     private:
-	std::string m_texture;
+	const char *m_texture;
 };
 
 class simple_block : public block {

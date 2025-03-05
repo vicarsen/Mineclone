@@ -76,6 +76,34 @@ void window::remove_input_handler(input_handler *handler)
 	std::erase(m_input_handlers, handler);
 }
 
+void window::set_cursor(cursor_mode mode)
+{
+	m_cursor = mode;
+
+	int glfw_mode;
+	switch (m_cursor) {
+	case cursor_mode::hidden:
+		glfw_mode = GLFW_CURSOR_DISABLED;
+		break;
+	case cursor_mode::normal:
+		glfw_mode = GLFW_CURSOR_NORMAL;
+		break;
+	}
+
+	glfwSetInputMode(m_window, GLFW_CURSOR, glfw_mode);
+}
+
+cursor_mode window::get_cursor() const
+{
+	return m_cursor;
+}
+
+void window::toggle_cursor()
+{
+	set_cursor(m_cursor == cursor_mode::hidden ? cursor_mode::normal :
+						     cursor_mode::hidden);
+}
+
 bool window::should_close() const
 {
 	return glfwWindowShouldClose(m_window);

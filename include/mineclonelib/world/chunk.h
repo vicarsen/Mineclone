@@ -1,9 +1,11 @@
 #pragma once
 
-#define CHUNK_SIZE 32
+#define CHUNK_SIZE_LOG 6
+#define CHUNK_SIZE 64
 #define CHUNK_PADDING 1
-#define CHUNK_BEGIN (CHUNK_SIZE + CHUNK_PADDING)
-#define CHUNK_END (CHUNK_SIZE + 2 * CHUNK_PADDING)
+#define CHUNK_BEGIN (CHUNK_PADDING)
+#define CHUNK_END (CHUNK_SIZE + CHUNK_PADDING)
+#define CHUNK_TOTAL (CHUNK_SIZE + 2 * CHUNK_PADDING)
 
 #include "mineclonelib/world/blocks.h"
 
@@ -25,7 +27,7 @@ struct chunk_draw_data {
 class chunk {
     public:
 	chunk();
-	virtual ~chunk();
+	virtual ~chunk() = default;
 
 	inline block_id get(int x, int y, int z) const noexcept
 	{
@@ -38,7 +40,7 @@ class chunk {
 	}
 
     private:
-	block_id m_blocks[CHUNK_END][CHUNK_END][CHUNK_END];
+	block_id m_blocks[CHUNK_TOTAL][CHUNK_TOTAL][CHUNK_TOTAL];
 };
 
 class chunk_draw_data_generator {

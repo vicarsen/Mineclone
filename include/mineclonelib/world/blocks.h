@@ -31,6 +31,11 @@ class face_registry {
 		return m_faces[face].get();
 	}
 
+	inline uint32_t size() const noexcept
+	{
+		return m_faces.size();
+	}
+
     private:
 	std::vector<std::unique_ptr<face> > m_faces;
 };
