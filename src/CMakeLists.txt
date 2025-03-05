@@ -5,6 +5,8 @@ set(
   "../include/mineclonelib/cvar.h"
   "../include/mineclonelib/misc.h"
   "../include/mineclonelib/transform.h"
+  "../include/mineclonelib/application.h"
+  "../include/mineclonelib/entrypoint.h"
 
   "../include/mineclonelib/world/blocks.h"
   "../include/mineclonelib/world/chunk.h"
@@ -26,6 +28,8 @@ set(
   "../include/mineclonelib/render/vk/context.h"
   "../include/mineclonelib/render/vk/gui.h"
   "../include/mineclonelib/render/vk/world.h"
+
+  "../include/mineclonelib/mineclone.h"
 )
 
 add_library(
@@ -34,6 +38,7 @@ add_library(
   log.cpp
   cvar.cpp
   transform.cpp
+  application.cpp
 
   world/blocks.cpp
   world/chunk.cpp
