@@ -76,9 +76,17 @@ template <typename tp> class cvar {
 
 	~cvar() = default;
 
-	void add_callback(std::function<void(value_type, value_type)> callback)
+	uint32_t
+	add_callback(std::function<void(value_type, value_type)> callback)
 	{
+		uint32_t handle = m_callbacks.size();
 		m_callbacks.emplace_back(callback);
+		return handle;
+	}
+
+	void remove_callback(uint32_t handle)
+	{
+		m_callbacks.erase(m_callbacks.begin() + handle);
 	}
 
 	void set(value_type v)
