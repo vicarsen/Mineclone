@@ -54,6 +54,7 @@ window::window(const char *title, int width, int height)
 	glfwMakeContextCurrent(m_window);
 
 	glfwSetWindowUserPointer(m_window, this);
+	glfwSetFramebufferSizeCallback(m_window, framebuffer_callback);
 	glfwSetKeyCallback(m_window, key_callback);
 	glfwSetMouseButtonCallback(m_window, button_callback);
 	glfwSetCursorPosCallback(m_window, cursor_callback);
@@ -78,6 +79,23 @@ void window::remove_input_handler(input_handler *handler)
 bool window::should_close() const
 {
 	return glfwWindowShouldClose(m_window);
+}
+
+void window::framebuffer_callback(GLFWwindow *handle, int width, int height)
+{
+	window *wnd =
+		reinterpret_cast<window *>(glfwGetWindowUserPointer(handle));
+
+	for (auto handler : wnd->m_input_handlers) {
+		handler->framebuffer_callback(width, height);
+	}
+
+	cvar<glm::ivec2> *window_size =
+		cvars<glm::ivec2>::get()->find("window/size");
+
+	if (window_size != nullptr) {
+		window_size->set({ width, height });
+	}
 }
 
 void window::key_callback(GLFWwindow *handle, int key, int scancode, int action,
