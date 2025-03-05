@@ -45,11 +45,15 @@ class chunk {
 
 class chunk_draw_data_generator {
     public:
+	virtual ~chunk_draw_data_generator() = default;
+
 	virtual chunk_draw_data generate(chunk *ch) = 0;
 };
 
 class simple_chunk_draw_data_generator : public chunk_draw_data_generator {
     public:
+	virtual ~simple_chunk_draw_data_generator() = default;
+
 	virtual chunk_draw_data generate(chunk *ch) override;
 };
 }
