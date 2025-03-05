@@ -1,3 +1,4 @@
+#include "imgui.h"
 #include <mineclonelib/mineclone.h>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -96,20 +97,20 @@ class mineclone_application : public mc::application {
 			glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 			glm::vec3 forward = m_camera.forward();
 
-			m_camera.position() -=
+			m_camera.position() +=
 				static_cast<float>(
 					(input->is_key_pressed(MC_KEY_D) -
 					 input->is_key_pressed(MC_KEY_A))) *
 				m_speed * right * input->get_delta_time();
 
-			m_camera.position() -=
+			m_camera.position() +=
 				static_cast<float>(
 					(input->is_key_pressed(MC_KEY_SPACE) -
 					 input->is_key_pressed(
 						 MC_KEY_LEFT_SHIFT))) *
 				m_speed * up * input->get_delta_time();
 
-			m_camera.position() +=
+			m_camera.position() -=
 				static_cast<float>(
 					input->is_key_pressed(MC_KEY_W) -
 					input->is_key_pressed(MC_KEY_S)) *
@@ -125,6 +126,17 @@ class mineclone_application : public mc::application {
 
 		set_view(glm::inverse(m_camera.get_matrix()));
 		set_projection(projection);
+
+		float time = input->get_delta_time();
+		m_fps = (time != 0.0f ? 1.0f / time : 0.0f);
+	}
+
+	virtual void render() override
+	{
+		if (ImGui::Begin("Stats")) {
+			ImGui::Text("FPS: %.2f", m_fps);
+			ImGui::End();
+		}
 	}
 
 	virtual void terminate() override
@@ -135,6 +147,8 @@ class mineclone_application : public mc::application {
 	mc::transform m_camera;
 	float m_sensitivity = 0.005f;
 	float m_speed = 5.0f;
+
+	float m_fps = 0.0;
 };
 
 std::unique_ptr<mc::application> create_app()

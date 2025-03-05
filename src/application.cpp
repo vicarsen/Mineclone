@@ -76,6 +76,8 @@ void application::run()
 		m_render_ctx->begin();
 		m_gui_ctx->begin();
 
+		render();
+
 		m_world_renderer->render(m_view, m_projection);
 
 		m_gui_ctx->present();

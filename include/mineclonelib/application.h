@@ -24,6 +24,10 @@ class application {
 	{
 	}
 
+	virtual void render()
+	{
+	}
+
 	virtual void terminate()
 	{
 	}

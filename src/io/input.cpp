@@ -22,7 +22,7 @@ void input_manager::preupdate()
 void input_manager::update()
 {
 	float time = glfwGetTime();
-	m_delta_time = m_time - time;
+	m_delta_time = time - m_time;
 	m_time = time;
 }
 

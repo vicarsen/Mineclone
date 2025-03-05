@@ -106,6 +106,8 @@ gl_context::gl_context(mc::window *window)
 		m_framebuffer_callback =
 			window_size->add_callback(framebuffer_callback);
 	}
+
+	glfwSwapInterval(0);
 }
 
 gl_context::~gl_context()
