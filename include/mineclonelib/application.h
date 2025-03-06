@@ -6,11 +6,18 @@
 #include "mineclonelib/render/context.h"
 #include "mineclonelib/render/gui.h"
 
+#include "mineclonelib/render/render.h"
 #include "mineclonelib/render/world.h"
+
 #include <memory>
 
 namespace mc
 {
+struct application_frame {
+	input_state input;
+	render::render_state render;
+};
+
 class application {
     public:
 	application();
@@ -20,7 +27,7 @@ class application {
 	{
 	}
 
-	virtual void update()
+	virtual void update(application_frame &frame)
 	{
 	}
 
@@ -33,9 +40,6 @@ class application {
 	}
 
 	void run();
-
-	void set_view(const glm::mat4 &view);
-	void set_projection(const glm::mat4 &projection);
 
 	inline window *get_window() const
 	{
@@ -72,12 +76,11 @@ class application {
 
 	std::unique_ptr<window> m_window;
 	std::unique_ptr<input_manager> m_input;
+
 	std::unique_ptr<render::context> m_render_ctx;
 	std::unique_ptr<render::gui_context> m_gui_ctx;
-
 	std::unique_ptr<render::world_renderer> m_world_renderer;
 
-	glm::mat4 m_view;
-	glm::mat4 m_projection;
+	std::vector<application_frame> m_frames;
 };
 }

@@ -1,5 +1,4 @@
 #include "mineclonelib/render/gl/context.h"
-#include "mineclonelib/cvar.h"
 
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
@@ -99,33 +98,27 @@ gl_context::gl_context(mc::window *window)
 	glCullFace(GL_BACK);
 	glFrontFace(GL_CW);
 
-	cvar<glm::ivec2> *window_size =
-		cvars<glm::ivec2>::get()->find("window/size");
-
-	if (window_size != nullptr) {
-		m_framebuffer_callback =
-			window_size->add_callback(framebuffer_callback);
-	}
-
 	glfwSwapInterval(0);
 }
 
 gl_context::~gl_context()
 {
-	cvar<glm::ivec2> *window_size =
-		cvars<glm::ivec2>::get()->find("window/size");
-
-	if (window_size != nullptr) {
-		window_size->remove_callback(m_framebuffer_callback);
-	}
-
 	if (glfwGetCurrentContext() == m_window->get_handle()) {
 		glfwMakeContextCurrent(nullptr);
 	}
 }
 
-void gl_context::begin()
+void gl_context::begin(render_state *state)
 {
+	m_state = state;
+
+	if (m_state->framebuffer_resized) {
+		glViewport(0, 0, m_state->framebuffer.x,
+			   m_state->framebuffer.y);
+
+		m_state->framebuffer_resized = false;
+	}
+
 	glClearColor(0.1f, 0.2f, 0.8f, 1.0f);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
@@ -135,9 +128,14 @@ void gl_context::present()
 	glfwSwapBuffers(m_window->get_handle());
 }
 
-void gl_context::framebuffer_callback(glm::ivec2 prev_size, glm::ivec2 size)
+void gl_context::make_current()
 {
-	glViewport(0, 0, size.x, size.y);
+	glfwMakeContextCurrent(m_window->get_handle());
+}
+
+void gl_context::unmake_current()
+{
+	glfwMakeContextCurrent(nullptr);
 }
 }
 }

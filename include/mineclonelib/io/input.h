@@ -26,13 +26,30 @@ class input_handler {
 	}
 };
 
+class input_state;
+
 class input_manager : public input_handler {
     public:
 	input_manager();
 	~input_manager() = default;
 
-	void preupdate();
+	void preupdate(input_state *state);
 	void update();
+
+	void key_callback(int key, input_event event) override;
+	void button_callback(int button, input_event event) override;
+	void cursor_callback(float x, float y) override;
+	void scroll_callback(float offsetx, float offsety) override;
+	void framebuffer_callback(int width, int height) override;
+
+    private:
+	input_state *m_state = nullptr;
+};
+
+class input_state {
+    public:
+	input_state() = default;
+	~input_state() = default;
 
 	inline bool is_key_pressed(int key) const noexcept
 	{
@@ -89,10 +106,20 @@ class input_manager : public input_handler {
 		return m_delta_time;
 	}
 
-	void key_callback(int key, input_event event) override;
-	void button_callback(int button, input_event event) override;
-	void cursor_callback(float x, float y) override;
-	void scroll_callback(float offsetx, float offsety) override;
+	inline void set_framebuffer(glm::ivec2 framebuffer) noexcept
+	{
+		m_framebuffer = framebuffer;
+	}
+
+	inline glm::ivec2 get_framebuffer() const noexcept
+	{
+		return m_framebuffer;
+	}
+
+	inline bool is_framebuffer_resized() const noexcept
+	{
+		return m_framebuffer_resized;
+	}
 
     private:
 	std::bitset<MC_KEY_LAST + 1> m_pressed;
@@ -103,5 +130,10 @@ class input_manager : public input_handler {
 	glm::vec2 m_scroll;
 
 	float m_time, m_delta_time;
+
+	glm::ivec2 m_framebuffer;
+	bool m_framebuffer_resized;
+
+	friend class input_manager;
 };
 }

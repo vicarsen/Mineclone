@@ -135,8 +135,10 @@ vk_context::~vk_context()
 	m_window->remove_input_handler(this);
 }
 
-void vk_context::begin()
+void vk_context::begin(render_state *state)
 {
+	m_state = state;
+
 	if (m_minimized) {
 		return;
 	}
@@ -249,6 +251,14 @@ void vk_context::present()
 	}
 
 	m_current_frame = (m_current_frame + 1) % m_frames.size();
+}
+
+void vk_context::make_current()
+{
+}
+
+void vk_context::unmake_current()
+{
 }
 
 void vk_context::framebuffer_callback(int width, int height)

@@ -17,7 +17,13 @@ FetchContent_Declare(
   GIT_TAG 3.4
 )
 
-FetchContent_MakeAvailable(spdlog glm glfw)
+FetchContent_Declare(
+  taskflow
+  GIT_REPOSITORY https://github.com/taskflow/taskflow.git
+  GIT_TAG v3.9.0
+)
+
+FetchContent_MakeAvailable(spdlog glm glfw taskflow)
 
 add_subdirectory(stb_image)
 add_subdirectory(glad)

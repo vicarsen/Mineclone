@@ -40,43 +40,53 @@ class mineclone_application : public mc::application {
 		mc::world::chunk_draw_data draw_data =
 			chunk_gen->generate(&chunk);
 
+		LOG_INFO(Default, "Real face count: {}",
+			 draw_data.faces.size());
+
 		mc::render::world_renderer *world_renderer =
 			get_world_renderer();
 
-		const int dim = 16;
-		mc::render::chunk_handle chunks[dim][dim];
+		const int dim = 8;
+		const int height = 6;
+		mc::render::chunk_handle chunks[dim][height][dim];
 		for (int i = 0; i < dim; i++) {
-			for (int j = 0; j < dim; j++) {
-				chunks[i][j] = world_renderer->alloc_chunk();
+			for (int j = 0; j < height; j++) {
+				for (int k = 0; k < dim; k++) {
+					chunks[i][j][k] =
+						world_renderer->alloc_chunk();
+				}
 			}
 		}
 
 		for (int i = 0; i < dim; i++) {
-			for (int j = 0; j < dim; j++) {
-				glm::mat4 model = glm::translate(
-					glm::mat4(1.0f),
-					glm::vec3(i * CHUNK_SIZE, 0,
-						  j * CHUNK_SIZE));
+			for (int j = 0; j < height; j++) {
+				for (int k = 0; k < dim; k++) {
+					glm::mat4 model = glm::translate(
+						glm::mat4(1.0f),
+						glm::vec3(i * CHUNK_SIZE,
+							  j * CHUNK_SIZE,
+							  k * CHUNK_SIZE));
 
-				world_renderer->upload_chunk(chunks[i][j],
-							     &draw_data, model);
+					world_renderer->upload_chunk(
+						chunks[i][j][k], &draw_data,
+						model);
+				}
 			}
 		}
 
 		get_window()->set_cursor(mc::cursor_mode::hidden);
 	}
 
-	virtual void update() override
+	virtual void update(mc::application_frame &frame) override
 	{
-		mc::input_manager *input = get_input();
 		mc::window *window = get_window();
 
-		if (input->is_key_just_pressed(MC_KEY_ESCAPE)) {
+		if (frame.input.is_key_just_pressed(MC_KEY_ESCAPE)) {
 			window->toggle_cursor();
 		}
 
 		if (window->get_cursor() == mc::cursor_mode::hidden) {
-			float scroll = input->get_scroll().y;
+			float scroll = frame.input.get_scroll().y;
 
 			if (scroll > 0) {
 				m_speed *= 1.0f + 1.0f / scroll;
@@ -86,48 +96,50 @@ class mineclone_application : public mc::application {
 
 			m_camera.rotation().x = glm::clamp(
 				m_camera.rotation().x -
-					input->get_cursor_delta().y *
+					frame.input.get_cursor_delta().y *
 						m_sensitivity,
 				glm::radians(-89.0f), glm::radians(89.0f));
 
 			m_camera.rotation().y -=
-				input->get_cursor_delta().x * m_sensitivity;
+				frame.input.get_cursor_delta().x *
+				m_sensitivity;
 
 			glm::vec3 right = m_camera.right();
 			glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
 			glm::vec3 forward = m_camera.forward();
 
 			m_camera.position() +=
-				static_cast<float>(
-					(input->is_key_pressed(MC_KEY_D) -
-					 input->is_key_pressed(MC_KEY_A))) *
-				m_speed * right * input->get_delta_time();
+				static_cast<float>((
+					frame.input.is_key_pressed(MC_KEY_D) -
+					frame.input.is_key_pressed(MC_KEY_A))) *
+				m_speed * right * frame.input.get_delta_time();
 
 			m_camera.position() +=
 				static_cast<float>(
-					(input->is_key_pressed(MC_KEY_SPACE) -
-					 input->is_key_pressed(
+					(frame.input.is_key_pressed(
+						 MC_KEY_SPACE) -
+					 frame.input.is_key_pressed(
 						 MC_KEY_LEFT_SHIFT))) *
-				m_speed * up * input->get_delta_time();
+				m_speed * up * frame.input.get_delta_time();
 
 			m_camera.position() -=
 				static_cast<float>(
-					input->is_key_pressed(MC_KEY_W) -
-					input->is_key_pressed(MC_KEY_S)) *
-				m_speed * forward * input->get_delta_time();
+					frame.input.is_key_pressed(MC_KEY_W) -
+					frame.input.is_key_pressed(MC_KEY_S)) *
+				m_speed * forward *
+				frame.input.get_delta_time();
 		}
 
-		glm::ivec2 size = mc::cvars<glm::ivec2>::get()->find_or(
-			"window/size", {});
+		float aspect = static_cast<float>(frame.render.framebuffer.x) /
+			       frame.render.framebuffer.y;
 
-		float aspect = static_cast<float>(size.x) / size.y;
 		glm::mat4 projection = glm::perspective(glm::radians(90.0f),
 							aspect, 0.1f, 1000.0f);
 
-		set_view(glm::inverse(m_camera.get_matrix()));
-		set_projection(projection);
+		frame.render.view = glm::inverse(m_camera.get_matrix());
+		frame.render.projection = projection;
 
-		float time = input->get_delta_time();
+		float time = frame.input.get_delta_time();
 		m_fps = (time != 0.0f ? 1.0f / time : 0.0f);
 	}
 

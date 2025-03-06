@@ -14,8 +14,11 @@ class vk_context : public context, public input_handler {
 	vk_context(window *wnd);
 	virtual ~vk_context();
 
-	virtual void begin() override;
+	virtual void begin(render_state *state) override;
 	virtual void present() override;
+
+	virtual void make_current() override;
+	virtual void unmake_current() override;
 
 	virtual void framebuffer_callback(int width, int height) override;
 

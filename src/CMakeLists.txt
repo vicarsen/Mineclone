@@ -63,7 +63,7 @@ add_library(
 )
 
 target_include_directories(mineclonelib PUBLIC ../include)
-target_link_libraries(mineclonelib PUBLIC spdlog glm stb_image glfw glad imgui imgui_glfw imgui_opengl3 imgui_vulkan)
+target_link_libraries(mineclonelib PUBLIC spdlog glm stb_image glfw glad imgui imgui_glfw imgui_opengl3 imgui_vulkan Taskflow)
 target_compile_features(mineclonelib PUBLIC cxx_std_20)
 
 if (MINECLONE_DEBUG)

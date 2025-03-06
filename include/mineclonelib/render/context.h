@@ -13,8 +13,11 @@ class context {
 	context(window *wnd);
 	virtual ~context() = default;
 
-	virtual void begin() = 0;
+	virtual void begin(render_state *state) = 0;
 	virtual void present() = 0;
+
+	virtual void make_current() = 0;
+	virtual void unmake_current() = 0;
 
 	inline window *get_window() const noexcept
 	{
@@ -25,6 +28,7 @@ class context {
 
     protected:
 	window *m_window;
+	render_state *m_state = nullptr;
 };
 }
 }
