@@ -13,7 +13,9 @@
 
 namespace mc
 {
-struct application_frame {
+struct application_frame {};
+
+struct application_state {
 	input_state input;
 	render::render_state render;
 };
@@ -27,7 +29,11 @@ class application {
 	{
 	}
 
-	virtual void update(application_frame &frame)
+	virtual void preupdate(application_frame &frame)
+	{
+	}
+
+	virtual void update(application_state &state, application_frame &frame)
 	{
 	}
 
@@ -81,6 +87,7 @@ class application {
 	std::unique_ptr<render::gui_context> m_gui_ctx;
 	std::unique_ptr<render::world_renderer> m_world_renderer;
 
+	application_state m_state;
 	std::vector<application_frame> m_frames;
 };
 }

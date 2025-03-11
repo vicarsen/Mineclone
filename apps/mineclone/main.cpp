@@ -77,16 +77,17 @@ class mineclone_application : public mc::application {
 		get_window()->set_cursor(mc::cursor_mode::hidden);
 	}
 
-	virtual void update(mc::application_frame &frame) override
+	virtual void update(mc::application_state &state,
+			    mc::application_frame &frame) override
 	{
 		mc::window *window = get_window();
 
-		if (frame.input.is_key_just_pressed(MC_KEY_ESCAPE)) {
+		if (state.input.is_key_just_pressed(MC_KEY_ESCAPE)) {
 			window->toggle_cursor();
 		}
 
 		if (window->get_cursor() == mc::cursor_mode::hidden) {
-			float scroll = frame.input.get_scroll().y;
+			float scroll = state.input.get_scroll().y;
 
 			if (scroll > 0) {
 				m_speed *= 1.0f + 1.0f / scroll;
@@ -96,12 +97,12 @@ class mineclone_application : public mc::application {
 
 			m_camera.rotation().x = glm::clamp(
 				m_camera.rotation().x -
-					frame.input.get_cursor_delta().y *
+					state.input.get_cursor_delta().y *
 						m_sensitivity,
 				glm::radians(-89.0f), glm::radians(89.0f));
 
 			m_camera.rotation().y -=
-				frame.input.get_cursor_delta().x *
+				state.input.get_cursor_delta().x *
 				m_sensitivity;
 
 			glm::vec3 right = m_camera.right();
@@ -110,36 +111,36 @@ class mineclone_application : public mc::application {
 
 			m_camera.position() +=
 				static_cast<float>((
-					frame.input.is_key_pressed(MC_KEY_D) -
-					frame.input.is_key_pressed(MC_KEY_A))) *
-				m_speed * right * frame.input.get_delta_time();
+					state.input.is_key_pressed(MC_KEY_D) -
+					state.input.is_key_pressed(MC_KEY_A))) *
+				m_speed * right * state.input.get_delta_time();
 
 			m_camera.position() +=
 				static_cast<float>(
-					(frame.input.is_key_pressed(
+					(state.input.is_key_pressed(
 						 MC_KEY_SPACE) -
-					 frame.input.is_key_pressed(
+					 state.input.is_key_pressed(
 						 MC_KEY_LEFT_SHIFT))) *
-				m_speed * up * frame.input.get_delta_time();
+				m_speed * up * state.input.get_delta_time();
 
 			m_camera.position() -=
 				static_cast<float>(
-					frame.input.is_key_pressed(MC_KEY_W) -
-					frame.input.is_key_pressed(MC_KEY_S)) *
+					state.input.is_key_pressed(MC_KEY_W) -
+					state.input.is_key_pressed(MC_KEY_S)) *
 				m_speed * forward *
-				frame.input.get_delta_time();
+				state.input.get_delta_time();
 		}
 
-		float aspect = static_cast<float>(frame.render.framebuffer.x) /
-			       frame.render.framebuffer.y;
+		float aspect = static_cast<float>(state.render.framebuffer.x) /
+			       state.render.framebuffer.y;
 
 		glm::mat4 projection = glm::perspective(glm::radians(90.0f),
 							aspect, 0.1f, 1000.0f);
 
-		frame.render.view = glm::inverse(m_camera.get_matrix());
-		frame.render.projection = projection;
+		state.render.view = glm::inverse(m_camera.get_matrix());
+		state.render.projection = projection;
 
-		float time = frame.input.get_delta_time();
+		float time = state.input.get_delta_time();
 		m_fps = (time != 0.0f ? 1.0f / time : 0.0f);
 	}
 

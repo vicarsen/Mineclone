@@ -4,6 +4,7 @@
 
 #include "mineclonelib/render/context.h"
 #include "mineclonelib/render/gui.h"
+#include "mineclonelib/render/render.h"
 #include "mineclonelib/render/world.h"
 
 #include <condition_variable>
@@ -76,22 +77,19 @@ void application::run()
 
 	init();
 
-	m_render_ctx->unmake_current();
+	m_state.input.set_framebuffer(wnd_size);
 
-	m_frames.resize(app_frames.get());
+	m_state.render.framebuffer = wnd_size;
+	m_state.render.framebuffer_resized = false;
 
-	m_frames.back().input.set_framebuffer(wnd_size);
+	m_state.render.view = glm::mat4(1.0f);
+	m_state.render.projection = glm::mat4(1.0f);
 
-	m_frames.back().render.framebuffer = wnd_size;
-	m_frames.back().render.framebuffer_resized = false;
-
-	m_frames.back().render.view = glm::mat4(1.0f);
-	m_frames.back().render.projection = glm::mat4(1.0f);
+	render::render_state render_state = m_state.render;
 
 	std::mutex mutex;
-	uint32_t current_frame;
-	bool should_poll = false;
-	bool polled = false;
+	bool poll_events = false;
+	bool start_update = false;
 	std::condition_variable cv;
 
 	tf::Taskflow taskflow;
@@ -100,18 +98,16 @@ void application::run()
 	auto start_pipe = [&](tf::Pipeflow &pf) {
 		{
 			std::lock_guard lock(mutex);
-
-			current_frame = pf.line();
-			should_poll = true;
+			poll_events = true;
 		}
 
 		cv.notify_one();
 
 		{
 			std::unique_lock lock(mutex);
-			cv.wait(lock, [&] { return polled; });
+			cv.wait(lock, [&] { return start_update; });
 
-			polled = false;
+			start_update = false;
 		}
 
 		if (m_window->should_close()) {
@@ -119,35 +115,21 @@ void application::run()
 		}
 	};
 
-	auto update_pipe = [&](tf::Pipeflow &pf) {
+	auto preupdate_pipe = [&](tf::Pipeflow &pf) {
 		uint32_t frame = pf.line();
-		update(m_frames[frame]);
+		preupdate(m_frames[frame]);
 	};
 
-	auto render_pipe = [&](tf::Pipeflow &pf) {
+	auto update_pipe = [&](tf::Pipeflow &pf) {
 		uint32_t frame = pf.line();
-
-		m_render_ctx->make_current();
-
-		m_render_ctx->begin(&m_frames[frame].render);
-		m_gui_ctx->begin();
-
-		render();
-
-		m_world_renderer->render(m_frames[frame].render.view,
-					 m_frames[frame].render.projection);
-
-		m_gui_ctx->present();
-		m_render_ctx->present();
-
-		m_render_ctx->unmake_current();
+		update(m_state, m_frames[frame]);
 	};
 
 	tf::Pipeline pipeline(
 		app_frames.get(),
 		tf::Pipe{ tf::PipeType::SERIAL, std::move(start_pipe) },
-		tf::Pipe{ tf::PipeType::PARALLEL, std::move(update_pipe) },
-		tf::Pipe{ tf::PipeType::SERIAL, std::move(render_pipe) });
+		tf::Pipe{ tf::PipeType::PARALLEL, std::move(preupdate_pipe) },
+		tf::Pipe{ tf::PipeType::SERIAL, std::move(update_pipe) });
 
 	tf::Task pipeline_task =
 		taskflow.composed_of(pipeline).name("App Frames");
@@ -155,34 +137,43 @@ void application::run()
 	tf::Future<void> done = executor.run(taskflow);
 
 	while (!m_window->should_close()) {
+		// Wait for next frame to finish
 		std::unique_lock lock(mutex);
-		cv.wait(lock, [&] { return should_poll; });
+		cv.wait(lock, [&] { return poll_events; });
 
-		uint32_t prev_frame =
-			(current_frame == 0 ? m_frames.size() : current_frame) -
-			1;
+		poll_events = false;
 
-		m_frames[current_frame].input = m_frames[prev_frame].input;
-		m_input->preupdate(&m_frames[current_frame].input);
+		// Poll events for next frame update
+		m_input->preupdate(&m_state.input);
 		window::poll_events();
 		m_input->update();
 
-		m_frames[current_frame].render.framebuffer =
-			m_frames[current_frame].input.get_framebuffer();
+		m_state.render.framebuffer = m_state.input.get_framebuffer();
+		m_state.render.framebuffer_resized =
+			m_state.input.is_framebuffer_resized();
 
-		m_frames[current_frame].render.framebuffer_resized =
-			m_frames[current_frame].input.is_framebuffer_resized();
+		render_state = m_state.render;
 
-		should_poll = false;
-		polled = true;
+		start_update = true;
 
+		// Start next frame update
 		lock.unlock();
 		cv.notify_one();
+
+		// Render current frame in parallel
+		m_render_ctx->begin(&render_state);
+		m_gui_ctx->begin();
+
+		render();
+
+		m_world_renderer->render(render_state.view,
+					 render_state.projection);
+
+		m_gui_ctx->present();
+		m_render_ctx->present();
 	}
 
 	done.wait();
-
-	m_frames.clear();
 
 	terminate();
 
