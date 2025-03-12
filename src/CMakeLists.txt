@@ -16,9 +16,11 @@ set(
   "../include/mineclonelib/io/input.h"
   "../include/mineclonelib/io/window.h"
 
+  "../include/mineclonelib/render/render.h"
   "../include/mineclonelib/render/context.h"
   "../include/mineclonelib/render/gui.h"
   "../include/mineclonelib/render/world.h"
+  "../include/mineclonelib/render/thread.h"
 
   "../include/mineclonelib/render/gl/utils.h"
   "../include/mineclonelib/render/gl/context.h"
@@ -46,9 +48,11 @@ add_library(
   io/input.cpp
   io/window.cpp
 
+  render/render.cpp
   render/context.cpp
   render/gui.cpp
   render/world.cpp
+  render/thread.cpp
 
   render/gl/utils.cpp
   render/gl/context.cpp

@@ -5,17 +5,6 @@ namespace mc
 {
 namespace world
 {
-chunk::chunk()
-{
-	for (int i = 0; i < CHUNK_TOTAL; i++) {
-		for (int j = 0; j < CHUNK_TOTAL; j++) {
-			for (int k = 0; k < CHUNK_TOTAL; k++) {
-				m_blocks[i][j][k] = blocks::air;
-			}
-		}
-	}
-}
-
 // Precalculated ambient occlusion data.
 // Mask = abcdefghi
 // a b c
@@ -63,7 +52,7 @@ static const uint8_t c_ao[] = {
 	95,  159, 255, 255, 111, 175, 255, 255
 };
 
-chunk_draw_data simple_chunk_draw_data_generator::generate(chunk *ch)
+chunk_draw_data simple_chunk_draw_data_generator::generate(chunk *ch) const
 {
 	static const int dx[] = { 1, -1, 0, 0, 0, 0 };
 	static const int dy[] = { 0, 0, 1, -1, 0, 0 };

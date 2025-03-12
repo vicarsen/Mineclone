@@ -7,6 +7,7 @@
 #include "mineclonelib/render/gui.h"
 
 #include "mineclonelib/render/render.h"
+#include "mineclonelib/render/thread.h"
 #include "mineclonelib/render/world.h"
 
 #include <memory>
@@ -57,19 +58,9 @@ class application {
 		return m_input.get();
 	}
 
-	inline render::context *get_render_ctx() const
+	inline render_thread *get_render_thread() const
 	{
-		return m_render_ctx.get();
-	}
-
-	inline render::gui_context *get_gui_ctx() const
-	{
-		return m_gui_ctx.get();
-	}
-
-	inline render::world_renderer *get_world_renderer() const
-	{
-		return m_world_renderer.get();
+		return m_render_thread.get();
 	}
 
 	static inline application *get() noexcept
@@ -83,9 +74,7 @@ class application {
 	std::unique_ptr<window> m_window;
 	std::unique_ptr<input_manager> m_input;
 
-	std::unique_ptr<render::context> m_render_ctx;
-	std::unique_ptr<render::gui_context> m_gui_ctx;
-	std::unique_ptr<render::world_renderer> m_world_renderer;
+	std::unique_ptr<render_thread> m_render_thread;
 
 	application_state m_state;
 	std::vector<application_frame> m_frames;

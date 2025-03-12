@@ -44,7 +44,7 @@ class mineclone_application : public mc::application {
 			 draw_data.faces.size());
 
 		mc::render::world_renderer *world_renderer =
-			get_world_renderer();
+			get_render_thread()->get_world_renderer();
 
 		const int dim = 8;
 		const int height = 6;

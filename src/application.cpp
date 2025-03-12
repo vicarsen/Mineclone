@@ -2,10 +2,7 @@
 #include "mineclonelib/cvar.h"
 #include "mineclonelib/misc.h"
 
-#include "mineclonelib/render/context.h"
-#include "mineclonelib/render/gui.h"
 #include "mineclonelib/render/render.h"
-#include "mineclonelib/render/world.h"
 
 #include <condition_variable>
 #include <glm/glm.hpp>
@@ -70,10 +67,8 @@ void application::run()
 	m_input = std::make_unique<input_manager>();
 	m_window->add_input_handler(m_input.get());
 
-	m_render_ctx = render::context::create(m_window.get());
-	m_gui_ctx = render::gui_context::create(m_render_ctx.get());
-
-	m_world_renderer = render::world_renderer::create(m_render_ctx.get());
+	m_render_thread = std::make_unique<render_thread>();
+	m_render_thread->init(m_window.get(), [&] { render(); });
 
 	init();
 
@@ -125,16 +120,23 @@ void application::run()
 		update(m_state, m_frames[frame]);
 	};
 
+	auto render_sync_pipe = [&](tf::Pipeflow &pf) {
+		m_render_thread->sync(m_state.render);
+	};
+
 	tf::Pipeline pipeline(
 		app_frames.get(),
 		tf::Pipe{ tf::PipeType::SERIAL, std::move(start_pipe) },
 		tf::Pipe{ tf::PipeType::PARALLEL, std::move(preupdate_pipe) },
-		tf::Pipe{ tf::PipeType::SERIAL, std::move(update_pipe) });
+		tf::Pipe{ tf::PipeType::SERIAL, std::move(update_pipe) },
+		tf::Pipe{ tf::PipeType::SERIAL, std::move(render_sync_pipe) });
 
 	tf::Task pipeline_task =
 		taskflow.composed_of(pipeline).name("App Frames");
 
 	tf::Future<void> done = executor.run(taskflow);
+
+	m_render_thread->start();
 
 	while (!m_window->should_close()) {
 		// Wait for next frame to finish
@@ -159,28 +161,14 @@ void application::run()
 		// Start next frame update
 		lock.unlock();
 		cv.notify_one();
-
-		// Render current frame in parallel
-		m_render_ctx->begin(&render_state);
-		m_gui_ctx->begin();
-
-		render();
-
-		m_world_renderer->render(render_state.view,
-					 render_state.projection);
-
-		m_gui_ctx->present();
-		m_render_ctx->present();
 	}
 
 	done.wait();
 
 	terminate();
 
-	m_world_renderer.reset();
-
-	m_gui_ctx.reset();
-	m_render_ctx.reset();
+	m_render_thread->terminate();
+	m_render_thread.reset();
 
 	m_window->remove_input_handler(m_input.get());
 	m_input.reset();
